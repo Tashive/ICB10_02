@@ -116,4 +116,6 @@ htmlcov/
 .*
 !.gitignore
 !**/.gitkeep
+!naver-api-app/data/
+
 
