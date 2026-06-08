@@ -111,3 +111,9 @@ logs/
 .tox/
 .coverage
 htmlcov/
+
+# --- Hidden Files and Folders (Starting with .) ---
+.*
+!.gitignore
+!**/.gitkeep
+
