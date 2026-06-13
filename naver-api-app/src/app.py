@@ -799,105 +799,25 @@ elif menu == "🛍️ 쇼핑 트렌드 분석":
     if st.button("쇼핑 트렌드 분석 실행", type="primary"):
         if not st.session_state["selected_shopping_categories"]:
             st.warning("최소 하나의 쇼핑 카테고리를 비교 목록에 추가해 주세요.")
-        else:
-            with st.spinner("네이버 쇼핑인사이트 데이터 조회 중..."):
-                try:
-                    df_list = []
-                    ages_mapped = []
-                    ages_map = {"10": "2", "20": "3", "30": "5", "40": "7", "50": "9", "60": "11"}
-                    for a in ages:
-                        if a in ages_map:
-                            ages_mapped.append(ages_map[a])
-                            
-                    for cat in st.session_state["selected_shopping_categories"]:
-                        cat_name = cat["name"]
-                        cat_id = cat["id"]
-                        data = cached_shopping_insight(
-                            client_id, client_secret, cat_id, cat_name,
-                            start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d"),
-                            time_unit, device, gender, ages_mapped
-                        )
+                        # 스마트스토어 파일 업로드 확인 및 파싱
+                        store_df = None
+                        if uploaded_file is not None:
+                            try:
+                                store_df = parse_smartstore_data(uploaded_file)
+                                # 각 상품의 소속 카테고리를 추정하는 컬럼 추가 (키워드 기반 자동 매핑)
+                                store_df["매핑 카테고리"] = "미분류"
+                                for idx, row in store_df.iterrows():
+                                    prod_name = row["상품명"]
+                                    for cat in st.session_state["selected_shopping_categories"]:
+                                        cat_name = cat["name"]
+                                        # 상품명에 카테고리명이 포함되는지 지능형 체크
+                                        if cat_name in prod_name or prod_name.replace(" ", "") in cat_name or any(part in prod_name for part in cat_name.split("/")) or (len(cat_name) >= 3 and cat_name[:3] in prod_name):
+                                            store_df.at[idx, "매핑 카테고리"] = cat_name
+                                            break
+                            except Exception as e:
+                                st.error(f"❌ 스마트스토어 데이터 파싱 실패: {str(e)}")
+                                store_df = None
                         
-                        results = data.get("results", [])
-                        if results and results[0].get("data"):
-                            g_data = results[0].get("data", [])
-                            df = pd.DataFrame(g_data)
-                            df["ratio"] = df["ratio"].astype(float)
-                            df["period"] = pd.to_datetime(df["period"])
-                            df["category"] = cat_name
-                            df_list.append(df)
-                    
-                    if not df_list:
-                        st.warning("조회된 데이터가 없습니다. 카테고리 또는 기간 설정을 확인해 주세요.")
-                    else:
-                        df_all = pd.concat(df_list, ignore_index=True)
-                        
-                        # 탭 인터페이스 구성
-                        tab1, tab2, tab3 = st.tabs(["📈 클릭 트렌드 & 기본 통계", "👥 성별/연령 및 매출액 추이", "🏆 개별 상품 랭킹 보드"])
-                        
-                        with tab1:
-                            # KPI 카드 배치
-                            st.markdown("### 🛍️ 카테고리별 트렌드 지표 요약")
-                            kpi_cols = st.columns(len(df_list))
-                            for i, cat in enumerate(st.session_state["selected_shopping_categories"]):
-                                cat_name = cat["name"]
-                                cat_df = df_all[df_all["category"] == cat_name]
-                                if not cat_df.empty:
-                                    mean_val = cat_df["ratio"].mean()
-                                    max_row = cat_df.loc[cat_df["ratio"].idxmax()]
-                                    colors = ["text-green", "text-blue", "text-purple", "text-green", "text-blue"]
-                                    with kpi_cols[i]:
-                                        make_card(
-                                            f"🛍️ {cat_name} 평균 클릭지표", 
-                                            f"{mean_val:.2f}%", 
-                                            f"최대치: {max_row['ratio']:.2f}% ({max_row['period'].strftime('%Y-%m-%d')})",
-                                            color_class=colors[i % len(colors)]
-                                        )
-                                
-                            # 트렌드 시각화
-                            st.markdown("### 📈 카테고리별 쇼핑 클릭 트렌드 추이 비교")
-                            fig = px.line(
-                                df_all, x="period", y="ratio", color="category",
-                                labels={"period": "날짜", "ratio": "클릭 비율 (%)", "category": "카테고리"},
-                                title="선택한 쇼핑 분야별 상대적 클릭량 추이 (가장 높은 시점 = 100)",
-                                template="plotly_dark"
-                            )
-                            fig.update_layout(
-                                hovermode="x unified",
-                                plot_bgcolor="rgba(0,0,0,0)",
-                                paper_bgcolor="rgba(0,0,0,0)"
-                            )
-                            st.plotly_chart(fig, use_container_width=True)
-                            
-                            # 상세 기술통계 테이블
-                            st.markdown("### 📊 카테고리별 세부 기술통계 및 분석")
-                            stat_df = df_all.groupby("category")["ratio"].describe().reset_index()
-                            
-                            # 왜도, 첨도, 변동계수 계산
-                            stats_extra = df_all.groupby("category")["ratio"].agg(
-                                skew="skew",
-                                kurtosis=lambda x: x.kurtosis(),
-                                cv=lambda x: x.std() / x.mean() if x.mean() != 0 else 0
-                            ).reset_index()
-                            
-                            stat_df = stat_df.merge(stats_extra, on="category")
-                            stat_df.columns = ["카테고리명", "데이터 수", "평균", "표준편차", "최소값", "25%", "중앙값(50%)", "75%", "최대값", "왜도 (Skewness)", "첨도 (Kurtosis)", "변동계수 (CV)"]
-                            
-                            st.dataframe(
-                                stat_df.style.background_gradient(cmap="BuGn", subset=["평균", "최대값"])
-                                .format({"평균": "{:.2f}", "표준편차": "{:.2f}", "왜도 (Skewness)": "{:.2f}", "첨도 (Kurtosis)": "{:.2f}", "변동계수 (CV)": "{:.2f}"}),
-                                use_container_width=True
-                            )
-                            
-                            # CSV 다운로드
-                            csv = df_all.to_csv(index=False).encode('utf-8')
-                            st.download_button(
-                                label="📥 CSV 파일로 쇼핑 트렌드 데이터 다운로드",
-                                data=csv,
-                                file_name=f"naver_shopping_trend_{datetime.now().strftime('%Y%m%d')}.csv",
-                                mime="text/csv"
-                            )
-                            
                         with tab2:
                             st.markdown("### 👥 카테고리별 성별 및 연령대 클릭 분포 분석")
                             
@@ -937,7 +857,7 @@ elif menu == "🛍️ 쇼핑 트렌드 분석":
                                     st.plotly_chart(fig_age, use_container_width=True)
                                     
                             # 매출 추이 시각화
-                            st.markdown("### 💰 카테고리별 일일 추정 매출액 추이")
+                            st.markdown("### 💰 카테고리별 일일 추정/실제 매출액 추이")
                             sales_list = []
                             for cat in st.session_state["selected_shopping_categories"]:
                                 cat_name = cat["name"]
