@@ -1098,18 +1098,240 @@ elif menu == "🛍️ 쇼핑 트렌드 분석":
                             * **노출 과다 (우측 하단)**: 클릭수는 높으나 구매전환율이 낮아 상세페이지나 가격 경쟁력 개선이 필요한 상품입니다.
                             """)
                             
+                            # 중위수 기준값 산출
+                            median_clicks = float(df_products["클릭수"].median())
+                            median_conv = float(df_products["구매전환율 (%)"].median())
+                            
+                            if pd.isna(median_clicks) or median_clicks <= 0:
+                                median_clicks = 1.0
+                            if pd.isna(median_conv) or median_conv <= 0:
+                                median_conv = 1.0
+                                
+                            def get_position(row, med_c, med_v):
+                                if row["클릭수"] >= med_c and row["구매전환율 (%)"] >= med_v:
+                                    return "스타 (우측 상단)"
+                                elif row["클릭수"] < med_c and row["구매전환율 (%)"] >= med_v:
+                                    return "성장 기회 (좌측 상단)"
+                                elif row["클릭수"] >= med_c and row["구매전환율 (%)"] < med_v:
+                                    return "노출 과다 (우측 하단)"
+                                else:
+                                    return "개선 필요 (좌측 하단)"
+                                    
+                            df_products["포지셔닝"] = df_products.apply(lambda r: get_position(r, median_clicks, median_conv), axis=1)
+                            
                             fig_scatter = px.scatter(
                                 df_products, x="클릭수", y="구매전환율 (%)",
-                                size="추정 매출액 (원)", color="추정 매출액 (원)",
+                                size="추정 매출액 (원)", color="포지셔닝",
                                 text="상품명",
-                                color_continuous_scale="Viridis",
+                                color_discrete_map={
+                                    "스타 (우측 상단)": "#10b981",
+                                    "성장 기회 (좌측 상단)": "#3b82f6",
+                                    "노출 과다 (우측 하단)": "#f59e0b",
+                                    "개선 필요 (좌측 하단)": "#ef4444"
+                                },
                                 title=f"{selected_rank_cat_name} 상품별 마케팅 포지셔닝 맵 (원 크기 = 매출액)",
-                                labels={"클릭수": "클릭수 (유입량)", "구매전환율 (%)": "구매전환율 (%)", "추정 매출액 (원)": "추정 매출액 (원)"},
+                                labels={"클릭수": "클릭수 (유입량)", "구매전환율 (%)": "구매전환율 (%)", "포지셔닝": "4사분면 포지션"},
                                 template="plotly_dark"
                             )
                             fig_scatter.update_traces(textposition='top center')
                             fig_scatter.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+                            
+                            # 중위수 기준 가이드라인 추가
+                            fig_scatter.add_vline(x=median_clicks, line_dash="dash", line_color="#94a3b8", 
+                                                 annotation_text=f"클릭 중위수 ({int(median_clicks)})", annotation_position="top left")
+                            fig_scatter.add_hline(y=median_conv, line_dash="dash", line_color="#94a3b8", 
+                                                 annotation_text=f"전환율 중위수 ({median_conv:.2f}%)", annotation_position="bottom right")
+                            
                             st.plotly_chart(fig_scatter, use_container_width=True)
+                            
+                            # --- 4사분면 진단 및 마케팅 가이드라인 보고서 렌더링 ---
+                            st.markdown("### 💡 맞춤형 상품 포트폴리오 진단 및 마케팅 가이드라인")
+                            
+                            quadrants = {
+                                "스타 (Star - 핵심 주력)": [],
+                                "성장 기회 (Growth - 노출 부족)": [],
+                                "노출 과다 (Exposure - 전환율 개선 필요)": [],
+                                "개선 필요 (Underperforming - 유입/설득 부족)": []
+                            }
+                            
+                            for _, row in df_products.iterrows():
+                                p_name = row["상품명"]
+                                clicks = row["클릭수"]
+                                conv = row["구매전환율 (%)"]
+                                rev = row["추정 매출액 (원)"]
+                                pos = row["포지셔닝"]
+                                
+                                item_info = (p_name, clicks, conv, rev)
+                                if pos == "스타 (우측 상단)":
+                                    quadrants["스타 (Star - 핵심 주력)"].append(item_info)
+                                elif pos == "성장 기회 (좌측 상단)":
+                                    quadrants["성장 기회 (Growth - 노출 부족)"].append(item_info)
+                                elif pos == "노출 과다 (우측 하단)":
+                                    quadrants["노출 과다 (Exposure - 전환율 개선 필요)"].append(item_info)
+                                else:
+                                    quadrants["개선 필요 (Underperforming - 유입/설득 부족)"].append(item_info)
+                                    
+                            # 상단에 요약 2x2 메트릭스 카드 배치
+                            st.markdown("#### 📊 포지셔닝 현황판")
+                            grid_col1, grid_col2 = st.columns(2)
+                            with grid_col1:
+                                make_card(
+                                    "🌟 스타 상품군",
+                                    f"{len(quadrants['스타 (Star - 핵심 주력)'])}개 상품",
+                                    "클릭수 높음 & 전환율 높음",
+                                    color_class="text-green"
+                                )
+                                make_card(
+                                    "⚠️ 노출 과다 상품군",
+                                    f"{len(quadrants['노출 과다 (Exposure - 전환율 개선 필요)'])}개 상품",
+                                    "클릭수 높음 & 전환율 낮음",
+                                    color_class="text-blue"
+                                )
+                            with grid_col2:
+                                make_card(
+                                    "📈 성장 기회 상품군",
+                                    f"{len(quadrants['성장 기회 (Growth - 노출 부족)'])}개 상품",
+                                    "클릭수 낮음 & 전환율 높음",
+                                    color_class="text-blue"
+                                )
+                                make_card(
+                                    "🔍 개선 필요 상품군",
+                                    f"{len(quadrants['개선 필요 (Underperforming - 유입/설득 부족)'])}개 상품",
+                                    "클릭수 낮음 & 전환율 낮음",
+                                    color_class="text-purple"
+                                )
+                                
+                            # 상세 탭 구성
+                            detail_tabs = st.tabs([
+                                "🌟 스타", 
+                                "📈 성장 기회", 
+                                "⚠️ 노출 과다", 
+                                "🔍 개선 필요"
+                            ])
+                            
+                            with detail_tabs[0]:
+                                st.markdown("#### 🌟 스타 (Star - 핵심 주력) 마케팅 액션")
+                                if quadrants["스타 (Star - 핵심 주력)"]:
+                                    st.markdown("**대상 상품:**")
+                                    for p in quadrants["스타 (Star - 핵심 주력)"]:
+                                        st.markdown(f"- 📦 `{p[0]}` (클릭: {p[1]:,}회 | 전환율: {p[2]:.2f}% | 매출: {p[3]:,}원)")
+                                else:
+                                    st.info("이 카테고리에 해당하는 상품이 없습니다.")
+                                st.markdown("""
+                                **현 상태:** 유입량과 구매 전환 매력이 모두 높은 가장 이상적인 핵심 상품군입니다.
+                                **추천 액션:**
+                                1. **재고 확보 및 배송 관리:** 품절로 인한 판매 기회 유실을 최우선적으로 방지합니다.
+                                2. **리뷰 관리 및 평점 최적화:** 구매 고객의 긍정 리뷰를 전면에 배치하고 부정 피드백에 신속 대응합니다.
+                                3. **노출 시너지 확보:** 네이버 쇼핑 검색 광고의 키워드 순위를 상위권으로 유지하며 브랜드 키워드 광고를 병행합니다.
+                                """)
+                                
+                            with detail_tabs[1]:
+                                st.markdown("#### 📈 성장 기회 (Growth - 노출 부족) 마케팅 액션")
+                                if quadrants["성장 기회 (Growth - 노출 부족)"]:
+                                    st.markdown("**대상 상품:**")
+                                    for p in quadrants["성장 기회 (Growth - 노출 부족)"]:
+                                        st.markdown(f"- 📦 `{p[0]}` (클릭: {p[1]:,}회 | 전환율: {p[2]:.2f}% | 매출: {p[3]:,}원)")
+                                else:
+                                    st.info("이 카테고리에 해당하는 상품이 없습니다.")
+                                st.markdown("""
+                                **현 상태:** 상품의 가격, 혜택, 상세페이지 등 설득력은 우수하나 유입되는 고객 수(노출)가 현저히 부족합니다.
+                                **추천 액션:**
+                                1. **검색 노출 최적화 (SEO):** 상품명에 네이버 쇼핑 트렌드 인기 키워드를 반영하고 태그 설정을 고도화합니다.
+                                2. **광고 예산 증액:** 저평가된 해당 상품군에 네이버 쇼핑 검색 광고나 성과형 디스플레이 광고(GFA) 예산을 늘려 유입을 강제로 유도합니다.
+                                3. **외부 채널 활용:** 블로그, SNS(인스타그램 등) 공동구매나 체험단을 진행하여 트래픽 유입 경로를 다각화합니다.
+                                """)
+                                
+                            with detail_tabs[2]:
+                                st.markdown("#### ⚠️ 노출 과다 (Exposure - 전환율 개선 필요) 마케팅 액션")
+                                if quadrants["노출 과다 (Exposure - 전환율 개선 필요)"]:
+                                    st.markdown("**대상 상품:**")
+                                    for p in quadrants["노출 과다 (Exposure - 전환율 개선 필요)"]:
+                                        st.markdown(f"- 📦 `{p[0]}` (클릭: {p[1]:,}회 | 전환율: {p[2]:.2f}% | 매출: {p[3]:,}원)")
+                                else:
+                                    st.info("이 카테고리에 해당하는 상품이 없습니다.")
+                                st.markdown("""
+                                **현 상태:** 광고나 상위 노출 등으로 유입은 충분히 발생하고 있으나, 상세페이지나 혜택 등이 매력적이지 않아 구매 결정을 내리지 못하고 이탈하고 있습니다.
+                                **추천 액션:**
+                                1. **상세페이지 개편:** 도입부의 후킹(Hooking) 소구점을 재점검하고, 로딩 속도가 느린 이미지나 가독성 떨어지는 텍스트를 개선합니다.
+                                2. **구매 장벽 제거:** 즉시 사용 가능한 할인 쿠폰 지급, 복수 구매 할인(1+1 등), 무료 배송 혜택을 일시적으로 추가해 구매를 유도합니다.
+                                3. **리뷰 및 신뢰 장치 보완:** 실구매 고객의 고화질 리뷰나 만족도 높은 후기를 상세페이지 상단에 삽입하여 구매 안심감을 부여합니다.
+                                """)
+                                
+                            with detail_tabs[3]:
+                                st.markdown("#### 🔍 개선 필요 (Underperforming - 유입/설득 부족) 마케팅 액션")
+                                if quadrants["개선 필요 (Underperforming - 유입/설득 부족)"]:
+                                    st.markdown("**대상 상품:**")
+                                    for p in quadrants["개선 필요 (Underperforming - 유입/설득 부족)"]:
+                                        st.markdown(f"- 📦 `{p[0]}` (클릭: {p[1]:,}회 | 전환율: {p[2]:.2f}% | 매출: {p[3]:,}원)")
+                                else:
+                                    st.info("이 카테고리에 해당하는 상품이 없습니다.")
+                                st.markdown("""
+                                **현 상태:** 노출과 매력도가 모두 평균 이하로 떨어져 방치되고 있거나 리뉴얼이 필요한 상품군입니다.
+                                **추천 액션:**
+                                1. **상품 전면 개편:** 썸네일(대표 이미지)을 최신 트렌드에 맞게 재촬영하고 상품명을 완전 리뉴얼합니다.
+                                2. **패키지 및 묶음 판매:** 단독 상품 판매가 어려우므로, '스타' 상품군의 보조 제품으로 묶거나 기획전 번들 상품으로 구성하여 강제 노출 기회를 만듭니다.
+                                3. **가격 포지셔닝 재조정:** 유사 경쟁 상품들과의 가격 분포를 확인하고 일시적인 파격 특가 행사를 통해 지수 상승을 꾀합니다.
+                                """)
+                                
+                            # 마크다운 리포트 생성 및 다운로드 버튼 제공
+                            report_content = f"""# 📊 [스마트스토어 상품 포트폴리오 마케팅 진단 보고서]
+- **기준 카테고리**: {selected_rank_cat_name}
+- **진단 일시**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+- **분류 임계치**: 클릭수 중위수 {int(median_clicks)}회 | 구매전환율 중위수 {median_conv:.2f}%
+
+---
+
+## 1. 포지셔닝 요약
+- **🌟 스타 (Star - 핵심 주력)**: {len(quadrants["스타 (Star - 핵심 주력)"])}개 상품
+- **📈 성장 기회 (Growth - 노출 부족)**: {len(quadrants["성장 기회 (Growth - 노출 부족)"])}개 상품
+- **⚠️ 노출 과다 (Exposure - 전환율 개선 필요)**: {len(quadrants["노출 과다 (Exposure - 전환율 개선 필요)"])}개 상품
+- **🔍 개선 필요 (Underperforming - 유입/설득 부족)**: {len(quadrants["개선 필요 (Underperforming - 유입/설득 부족)"])}개 상품
+
+---
+
+## 2. 그룹별 진단 및 마케팅 추천 액션
+
+### 🌟 스타 (Star - 핵심 주력)
+- **대상 상품**: {', '.join([f"'{p[0]}'" for p in quadrants["스타 (Star - 핵심 주력)"]]) if quadrants["스타 (Star - 핵심 주력)"] else '없음'}
+- **현 상태**: 유입량과 구매 전환 매력이 모두 높은 가장 이상적인 핵심 상품군입니다.
+- **추천 액션**:
+  1. **재고 확보 및 배송 관리**: 품절로 인한 판매 기회 유실을 최우선적으로 방지합니다.
+  2. **리뷰 관리 및 평점 최적화**: 구매 고객의 긍정 리뷰를 전면에 배치하고 부정 피드백에 신속 대응합니다.
+  3. **노출 시너지 확보**: 네이버 쇼핑 검색 광고의 키워드 순위를 상위권으로 유지하며 브랜드 키워드 광고를 병행합니다.
+
+### 📈 성장 기회 (Growth - 노출 부족)
+- **대상 상품**: {', '.join([f"'{p[0]}'" for p in quadrants["성장 기회 (Growth - 노출 부족)"]]) if quadrants["성장 기회 (Growth - 노출 부족)"] else '없음'}
+- **현 상태**: 상품의 가격, 혜택, 상세페이지 등 설득력은 우수하나 유입되는 고객 수(노출)가 현저히 부족합니다.
+- **추천 액션**:
+  1. **검색 노출 최적화 (SEO)**: 상품명에 네이버 쇼핑 트렌드 인기 키워드를 반영하고 태그 설정을 고도화합니다.
+  2. **광고 예산 증액**: 저평가된 해당 상품군에 네이버 쇼핑 검색 광고나 성과형 디스플레이 광고(GFA) 예산을 늘려 유입을 강제로 유도합니다.
+  3. **외부 채널 활용**: 블로그, SNS(인스타그램 등) 공동구매나 체험단을 진행하여 트래픽 유입 경로를 다각화합니다.
+
+### ⚠️ 노출 과다 (Exposure - 전환율 개선 필요)
+- **대상 상품**: {', '.join([f"'{p[0]}'" for p in quadrants["노출 과다 (Exposure - 전환율 개선 필요)"]]) if quadrants["노출 과다 (Exposure - 전환율 개선 필요)"] else '없음'}
+- **현 상태**: 광고나 상위 노출 등으로 유입은 충분히 발생하고 있으나, 상세페이지나 혜택 등이 매력적이지 않아 구매 결정을 내리지 못하고 이탈하고 있습니다.
+- **추천 액션**:
+  1. **상세페이지 개편**: 도입부의 후킹(Hooking) 소구점을 재점검하고, 로딩 속도가 느린 이미지나 가독성 떨어지는 텍스트를 개선합니다.
+  2. **구매 장벽 제거**: 즉시 사용 가능한 할인 쿠폰 지급, 복수 구매 할인(1+1 등), 무료 배송 혜택을 일시적으로 추가해 구매를 유도합니다.
+  3. **리뷰 및 신뢰 장치 보완**: 실구매 고객의 고화질 리뷰나 만족도 높은 후기를 상세페이지 상단에 삽입하여 구매 안심감을 부여합니다.
+
+### 🔍 개선 필요 (Underperforming - 유입/설득 부족)
+- **대상 상품**: {', '.join([f"'{p[0]}'" for p in quadrants["개선 필요 (Underperforming - 유입/설득 부족)"]]) if quadrants["개선 필요 (Underperforming - 유입/설득 부족)"] else '없음'}
+- **현 상태**: 노출과 매력도가 모두 평균 이하로 떨어져 방치되고 있거나 리뉴얼이 필요한 상품군입니다.
+- **추천 액션**:
+  1. **상품 전면 개편**: 썸네일(대표 이미지)을 최신 트렌드에 맞게 재촬영하고 상품명을 완전 리뉴얼합니다.
+  2. **패키지 및 묶음 판매**: 단독 상품 판매가 어려우므로, '스타' 상품군의 보조 제품으로 묶거나 기획전 번들 상품으로 구성하여 강제 노출 기회를 만듭니다.
+  3. **가격 포지셔닝 재조정**: 유사 경쟁 상품들과의 가격 분포를 확인하고 일시적인 파격 특가 행사를 통해 지수 상승을 꾀합니다.
+"""
+                            
+                            st.markdown("#### 📥 진단 보고서 내보내기")
+                            st.download_button(
+                                label="📥 마케팅 진단 보고서 마크다운(.md) 파일 다운로드",
+                                data=report_content.encode('utf-8'),
+                                file_name=f"smartstore_marketing_report_{selected_rank_cat_name}_{datetime.now().strftime('%Y%m%d')}.md",
+                                mime="text/markdown",
+                                key="download_marketing_report_btn"
+                            )
                 except Exception as e:
                     err_msg = str(e)
                     st.error(f"🚨 쇼핑 트렌드 데이터를 불러오지 못했습니다: {err_msg}")
