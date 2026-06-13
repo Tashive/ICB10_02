@@ -590,6 +590,7 @@ div[data-testid="stSidebarNav"] { display: none; }
 st.sidebar.markdown('<div class="sidebar-section-header">안내</div>', unsafe_allow_html=True)
 
 menu_all = [
+    "🏠 종합 대시보드",
     "🏠 대시보드 소개",
     "📈 검색어 트렌드 분석",
     "🛍️ 쇼핑 트렌드 분석",
@@ -602,14 +603,19 @@ menu_all = [
 
 # 세션 상태에서 현재 선택된 메뉴 가져오기
 if "current_menu" not in st.session_state:
-    st.session_state["current_menu"] = "🏠 대시보드 소개"
+    st.session_state["current_menu"] = "🏠 종합 대시보드"
+
+# 종합 대시보드용 기본 예시 데이터 초기화
+if "diagnose_df" not in st.session_state or st.session_state["diagnose_df"] is None:
+    st.session_state["diagnose_df"] = get_preset_sales_data()
+    st.session_state["diagnose_is_preset"] = True
 
 def set_menu(selected):
     """메뉴 선택 콜백 함수"""
     st.session_state["current_menu"] = selected
 
 # 안내 섹션
-for item in ["🏠 대시보드 소개"]:
+for item in ["🏠 종합 대시보드", "🏠 대시보드 소개"]:
     is_active = st.session_state["current_menu"] == item
     btn_style = "primary" if is_active else "secondary"
     if st.sidebar.button(item, key=f"menu_{item}", use_container_width=True, type=btn_style):
