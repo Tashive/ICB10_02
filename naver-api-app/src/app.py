@@ -1483,8 +1483,8 @@ elif menu == "📦 내 쇼핑몰 상품 진단":
         if warnings:
             st.warning("⚠️ **분석 모델 경고 (데이터 보정 알림)**\n" + "\n".join([f"- {msg}" for msg in warnings]))
             
-        # 4. 2개 탭 구성
-        tab1, tab2 = st.tabs(["📊 종합 성과 요약 & 마케팅 액션", "📋 상품 데이터 상세 내역"])
+        # 4. 3개 탭 구성
+        tab_dashboard, tab_actions, tab_details = st.tabs(["🏠 종합 대시보드", "🎯 마케팅 액션 & 상세 진단", "📋 상품 데이터 상세 내역"])
         
         # 임계값 및 포지셔닝 진단 연산
         q85_clicks = df_cleaned["클릭수"].quantile(0.85)
@@ -1527,7 +1527,104 @@ elif menu == "📦 내 쇼핑몰 상품 진단":
         pending_count = total_count - checked_count
         completion_rate = (checked_count / total_count) * 100
         
-        with tab1:
+        # --- 1. 🏠 종합 대시보드 탭 ---
+        with tab_dashboard:
+            st.markdown("#### 📊 쇼핑몰 핵심 성과 지표 요약")
+            
+            # 지표 계산
+            total_clicks = int(df_cleaned["클릭수"].sum())
+            total_purchases = int(df_cleaned["추정 구매수"].sum())
+            total_revenue = int(df_cleaned["추정 매출액 (원)"].sum())
+            overall_cvr = (total_purchases / total_clicks) * 100 if total_clicks > 0 else df_cleaned["구매전환율 (%)"].mean()
+            
+            col_dash1, col_dash2, col_dash3, col_dash4 = st.columns(4)
+            with col_dash1:
+                make_card("🎯 총 유입수 (클릭)", f"{total_clicks:,}회", "전체 등록 상품 누적 클릭수", "text-blue")
+            with col_dash2:
+                make_card("🛍️ 총 구매 건수", f"{total_purchases:,}건", "전체 등록 상품 누적 주문건수", "text-purple")
+            with col_dash3:
+                make_card("💰 총 추정 매출액", f"{total_revenue:,}원", "전체 상품 매출액의 합산", "text-green")
+            with col_dash4:
+                make_card("📈 종합 구매전환율 (CVR)", f"{overall_cvr:.2f}%", "총 구매수 / 총 클릭수", "text-orange")
+                
+            st.markdown("---")
+            
+            col_chart1, col_chart2 = st.columns(2)
+            with col_chart1:
+                # 포지셔닝 분포 파이 차트
+                pos_counts = df_cleaned["포지셔닝"].value_counts().reset_index()
+                pos_counts.columns = ["포지셔닝", "상품수"]
+                fig_pos_pie = px.pie(
+                    pos_counts, values="상품수", names="포지셔닝",
+                    title="🎯 내 쇼핑몰 상품 포지셔닝 분포 비중",
+                    color="포지셔닝",
+                    color_discrete_map={
+                        "개선 필요": "#ef4444",
+                        "노출 과다": "#f97316",
+                        "스타": "#10b981",
+                        "성장 기회": "#3b82f6",
+                        "유지 관리": "#6b7280"
+                    },
+                    hole=0.4,
+                    template="plotly_dark"
+                )
+                fig_pos_pie.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+                st.plotly_chart(fig_pos_pie, use_container_width=True)
+                
+            with col_chart2:
+                # 매출 상위 10대 상품 가로 막대 그래프
+                df_top10 = df_cleaned.sort_values(by="추정 매출액 (원)", ascending=True).tail(10)
+                fig_top10 = px.bar(
+                    df_top10, x="추정 매출액 (원)", y="상품명", color="포지셔닝",
+                    color_discrete_map={
+                        "개선 필요": "#ef4444",
+                        "노출 과다": "#f97316",
+                        "스타": "#10b981",
+                        "성장 기회": "#3b82f6",
+                        "유지 관리": "#6b7280"
+                    },
+                    orientation="h",
+                    title="💰 상품 매출액 기여도 Top 10 (색상 = 포지셔닝)",
+                    labels={"추정 매출액 (원)": "매출액 (원)", "상품명": "상품명"},
+                    template="plotly_dark"
+                )
+                fig_top10.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+                fig_top10.update_traces(marker_cornerradius=6)
+                st.plotly_chart(fig_top10, use_container_width=True)
+                
+            st.markdown("---")
+            
+            # 비즈니스 진단 리포트 요약 카드
+            st.markdown("#### 💡 비즈니스 핵심 진단 요약")
+            
+            star_prods = df_cleaned[df_cleaned["포지셔닝"] == "스타"]["상품명"].tolist()
+            over_prods = df_cleaned[df_cleaned["포지셔닝"] == "노출 과다"]["상품명"].tolist()
+            under_prods = df_cleaned[df_cleaned["포지셔닝"] == "개선 필요"]["상품명"].tolist()
+            growth_prods = df_cleaned[df_cleaned["포지셔닝"] == "성장 기회"]["상품명"].tolist()
+            
+            def format_prod_list(prods):
+                if not prods: return "없음"
+                if len(prods) > 3:
+                    return f"**{', '.join(prods[:3])}** 외 {len(prods)-3}개"
+                return f"**{', '.join(prods)}**"
+                
+            st.markdown(f"""
+            <div style="background: rgba(30, 41, 59, 0.45); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 16px; padding: 22px; margin-bottom: 15px;">
+                <div style="font-size: 16px; line-height: 1.8;">
+                    🏆 <b>핵심 캐시카우 (스타 상품)</b>: {format_prod_list(star_prods)}<br>
+                    <span style="color: #94a3b8; font-size: 13.5px; margin-left: 20px;">➔ 유입수와 구매전환율이 모두 우수한 효자 상품군입니다. 마케팅 예산을 우선 배정하여 경쟁사 진입을 방지하세요.</span><br><br>
+                    🚨 <b>광고 비효율 경보 (노출 과다 상품)</b>: {format_prod_list(over_prods)}<br>
+                    <span style="color: #94a3b8; font-size: 13.5px; margin-left: 20px;">➔ 유입은 많으나 전환율이 평균 미만입니다. 상세페이지 개선, 리뷰 최적화 또는 쿠폰 혜택 제공이 시급합니다.</span><br><br>
+                    ⚠️ <b>즉시 개선 요망 (개선 필요 상품)</b>: {format_prod_list(under_prods)}<br>
+                    <span style="color: #94a3b8; font-size: 13.5px; margin-left: 20px;">➔ 유입 상위 20%에 속하나 전환율은 최하위 30% 미만인 상품입니다. 상품 옵션 구조, 가격 허들, 또는 이탈 요인을 점검하세요.</span><br><br>
+                    📈 <b>성장 가능성 잠재주 (성장 기회 상품)</b>: {format_prod_list(growth_prods)}<br>
+                    <span style="color: #94a3b8; font-size: 13.5px; margin-left: 20px;">➔ 전환선호도는 높으나 아직 검색 노출이나 유입이 부족합니다. 검색광고나 외부 SNS 홍보를 통해 유입량을 조금만 늘리면 매출이 극대화됩니다.</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+        # --- 2. 🎯 마케팅 액션 & 상세 진단 탭 ---
+        with tab_actions:
             # 상단 독자적인 스코어카드 배치
             col_score1, col_score2, col_score3, col_score4 = st.columns(4)
             with col_score1:
@@ -1688,7 +1785,8 @@ elif menu == "📦 내 쇼핑몰 상품 진단":
                 use_container_width=True
             )
             
-        with tab2:
+        # --- 3. 📋 상품 데이터 상세 내역 탭 ---
+        with tab_details:
             st.markdown("#### 📋 상품 데이터 상세 내역 및 다운로드")
             
             search_query = st.text_input("🔍 상품명으로 검색", "", key="diagnose_search")
