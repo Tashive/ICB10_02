@@ -170,7 +170,15 @@ if client_secret: st.session_state["client_secret"] = client_secret
 
 # 연결 상태 표시기
 if client_id and client_secret:
-    st.sidebar.success("API Keys Configured")
+    st.sidebar.markdown(
+        """
+        <div style="background-color: #10b981; color: white; padding: 12px; border-radius: 8px; font-weight: bold; display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+            <span style="font-size: 1.1em;">\u2705</span>
+            <span>API 인증 키를 성공적으로 로드했습니다.</span>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 else:
     st.sidebar.warning("API Keys Required")
 
