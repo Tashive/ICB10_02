@@ -1,4 +1,4 @@
-# 📊 Naver API Insight Dashboard 프로젝트 배포 완료 (`v1.2.0`)
+# 📊 Naver API Insight Dashboard 프로젝트 배포 완료 (`v1.3.0`)
 
 ## 🔗 Streamlit 서비스 접속 주소
 * **배포 URL**: [https://icb1002-l6oj3njr57og9w4vj69rnn.streamlit.app/](https://icb1002-l6oj3njr57og9w4vj69rnn.streamlit.app/)
