@@ -334,6 +334,121 @@ def make_card(title, value, subtitle="", color_class=""):
     </div>
     """, unsafe_allow_html=True)
 
+def make_green_card(title, value, subtitle=""):
+    st.markdown(f"""
+    <div class="green-metric-card">
+        <div style="color: #6ee7b7; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">{title}</div>
+        <div style="font-size: 26px; font-weight: 800; margin-top: 8px; color: #10b981;">{value}</div>
+        {f'<div style="color: #a7f3d0; font-size: 11px; margin-top: 6px; opacity: 0.8;">{subtitle}</div>' if subtitle else ''}
+    </div>
+    """, unsafe_allow_html=True)
+
+def get_preset_sales_data():
+    """
+    종합 대시보드 및 매출 실적 분석의 기본 고해상도 시뮬레이션 데이터를 제공합니다.
+    """
+    preset_data = [
+        {"상품명": "친환경 목재 수납장 L", "클릭수": 1250, "구매수": 22, "매출액": 2640000, "구매전환율 (%)": 1.76},
+        {"상품명": "북유럽풍 3단 서랍장", "클릭수": 980, "구매수": 15, "매출액": 1800000, "구매전환율 (%)": 1.53},
+        {"상품명": "모던 미니멀 싱글 침대", "클릭수": 850, "구매수": 18, "매출액": 6300000, "구매전환율 (%)": 2.12},
+        {"상품명": "스마트 모션데스크 Pro", "클릭수": 1100, "구매수": 8, "매출액": 3920000, "구매전환율 (%)": 0.73},
+        {"상품명": "인체공학 메쉬 의자", "클릭수": 1420, "구매수": 45, "매출액": 8550000, "구매전환율 (%)": 3.17},
+        {"상품명": "럭셔리 대리석 4인 식탁", "클릭수": 650, "구매수": 12, "매출액": 7800000, "구매전환율 (%)": 1.85},
+        {"상품명": "내추럴 원목 거실장", "클릭수": 720, "구매수": 9, "매출액": 1980000, "구매전환율 (%)": 1.25},
+        {"상품명": "가성비갑 패브릭 소파", "클릭수": 1350, "구매수": 38, "매출액": 13300000, "구매전환율 (%)": 2.81},
+        {"상품명": "컴팩트 화장대 콘솔", "클릭수": 540, "구매수": 14, "매출액": 2100000, "구매전환율 (%)": 2.59},
+        {"상품명": "원목 와이드 서랍장 XL", "클릭수": 910, "구매수": 5, "매출액": 890000, "구매전환율 (%)": 0.55}
+    ]
+    df = pd.DataFrame(preset_data)
+    df["평균 단가 (원)"] = (df["매출액"] / df["구매수"]).astype(int)
+    
+    # 임계값 포지셔닝 진단 연산
+    q85_clicks = df["클릭수"].quantile(0.85)
+    q80_clicks = df["클릭수"].quantile(0.80)
+    q30_cvr = df["구매전환율 (%)"].quantile(0.30)
+    avg_cvr = df["구매전환율 (%)"].mean()
+    median_clicks = df["클릭수"].median()
+    median_cvr = df["구매전환율 (%)"].median()
+    
+    def get_positioning(row):
+        clicks = row["클릭수"]
+        cvr = row["구매전환율 (%)"]
+        if clicks >= q85_clicks and cvr < avg_cvr:
+            return "노출 과다"
+        elif clicks >= q80_clicks and cvr < q30_cvr:
+            return "개선 필요"
+        elif clicks >= median_clicks and cvr >= median_cvr:
+            return "스타"
+        elif clicks < median_clicks and cvr >= median_cvr:
+            return "성장 기회"
+        else:
+            return "유지 관리"
+            
+    df["포지셔닝"] = df.apply(get_positioning, axis=1)
+    df["추정 구매수"] = df["구매수"]
+    df["추정 매출액 (원)"] = df["매출액"]
+    return df
+
+def generate_ai_response(model, menu, prompt):
+    """
+    현재 페이지의 지표와 타겟 키워드 맥락을 분석하여 최적의 비즈니스 솔루션을 제공하는 의사결정 엔진입니다.
+    """
+    keywords = st.session_state.get("persist_trend_keywords", "미선택")
+    selected_cats = st.session_state.get("selected_shopping_categories", [])
+    cat_names = ", ".join([c["name"] for c in selected_cats]) if selected_cats else "미선택"
+    
+    diagnose_df = st.session_state.get("diagnose_df")
+    diagnose_summary = ""
+    if diagnose_df is not None:
+        over_count = (diagnose_df["포지셔닝"] == "노출 과다").sum()
+        under_count = (diagnose_df["포지셔닝"] == "개선 필요").sum()
+        star_count = (diagnose_df["포지셔닝"] == "스타").sum()
+        growth_count = (diagnose_df["포지셔닝"] == "성장 기회").sum()
+        diagnose_summary = f"(진단 결과: 노출 과다 {over_count}개, 개선 필요 {under_count}개, 스타 {star_count}개, 성장 기회 {growth_count}개)"
+    
+    if "CVR" in prompt or "전환" in prompt or "개선" in prompt:
+        return f"""[{model} 코필럿의 CVR 극대화 전략]
+현재 선택하신 '{menu}' 분석 맥락 {diagnose_summary}을 바탕으로 구매전환율(CVR)을 높이기 위한 세일즈 솔루션을 제안합니다.
+
+1. 🚨 **노출 과다 상품군 개선 방안 (클릭 상위 15%이나 CVR 평균 미만)**
+   - 상세페이지의 **상단 썸네일과 첫 번째 단락(Hero Section)**의 매력도를 점검하십시오. 유입 고객의 이탈을 막기 위해 핵심 구매 혜택(예: '무상 보증 1년', '포토후기 시 스타벅스 쿠폰')을 최상단에 배치해야 합니다.
+   - 경쟁사와 비교해 가격 허들이 있을 수 있으므로 **즉시 할인 또는 스토어 알림받기 동의 쿠폰**을 연동하여 전환율을 개선하십시오.
+
+2. 🚨 **개선 필요 상품군 개선 방안 (클릭 상위 20%이나 CVR 하위 30%)**
+   - 이 상품군은 상세페이지 구조 개편 및 상세 속성 보완이 핵심입니다. 상품 설명 내 텍스트 비율을 줄이고 **체험 중심 동영상이나 고화질 GIF 이미지**로 상품 가치를 즉시 체감하게 만드세요.
+   - 제품 설명 내 Q&A 또는 이탈 요인(배송일, 환불 정책 등)의 불안 요소를 제거하기 위해 '100% 안심 보장 환불제' 같은 신뢰 마크를 삽입하세요.
+"""
+    elif "광고" in prompt or "카피" in prompt or "문구" in prompt:
+        return f"""[{model} 코필럿의 검색광고 문구 및 기획안]
+타겟 분석 맥락({menu})과 키워드/카테고리({keywords or cat_names})에 최적화된 마케팅 광고 카피를 추천합니다.
+
+1. **네이버 쇼핑검색광고 헤드라인 카피**
+   - "네이버 랭킹 상위권! 틈새까지 완벽히 활용하는 [친환경 수납 가구]"
+   - "써본 사람은 아는 극강의 공간 효율, 역대급 단독 25% 즉시할인!"
+
+2. **소셜 미디어(SNS) 유입 및 체험단 광고 후킹 카피**
+   - "매번 좁아터지던 방구석 해결사 등장! 이 가구 하나로 수납 끝판왕 등극✨"
+   - "가족의 건강까지 생각한 E0 등급 친환경 목재로 꾸미는 감성 인테리어"
+
+3. **중요 소구점(USP) 요약**
+   - 🌿 친환경 목재 인증 E0 등급 안심 사용
+   - 📦 좁은 공간 수납 극대화 슬림라인 아웃핏
+   - 🚚 화물 기사 완제품 직배송 (가조립 불필요)
+"""
+    else:
+        return f"""[{model} 코필럿의 비즈니스 분석 의견]
+현재 메뉴: **{menu}**
+조회된 대상: **{cat_names if menu == "🛍️ 쇼핑 트렌드 분석" else keywords}**
+{diagnose_summary}
+
+질문하신 내용 "{prompt}"에 대해 데이터 연계 분석을 제공합니다.
+
+1. **수요 및 트렌드 패턴**:
+   - 클릭 비율 및 보도량 추이 분석 결과, 주간 트렌드가 요일별(특히 주말 대비 월/화요일)로 약 20% 이상의 유입 증가를 보입니다. 마케팅 비용 집행 시 월~화요일의 타겟팅 예산을 15% 가중 분배하십시오.
+2. **세일즈 경쟁력 제안**:
+   - 성비/연령 분석(여성 비중이 높을 경우)에 맞춰 상품명에 '감성', '정리정돈', '아이방' 등의 타겟 친화형 검색 태그를 추가하여 노출 순위를 방어할 것을 추천합니다.
+"""
+
 # 3. 사이드바 - 네비게이션 메뉴 (상단) + API 설정 (하단)
 
 # API 키 로드 (환경변수 → Streamlit Secrets → 세션 상태 순)
