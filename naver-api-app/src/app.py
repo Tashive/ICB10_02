@@ -124,6 +124,107 @@ def cached_news_search(client_id, client_secret, query, display, start, sort):
 def cached_shopping_search(client_id, client_secret, query, display, start, sort, filter_pay, exclude_types):
     return naver_api.fetch_shopping_search(client_id, client_secret, query, display, start, sort, filter_pay, exclude_types)
 
+# --- 쇼핑 트렌드 고도화 분석을 위한 가상/시뮬레이션 데이터 생성 도우미 함수 ---
+def generate_mock_products(cat_name, cat_id):
+    """
+    카테고리 이름을 기반으로 난수 시드를 생성하여 개별 상품의 가상 클릭수, 전환율, 가격, 매출 정보를 모델링해 랭킹 보드용 데이터를 반환합니다.
+    """
+    seed = int(cat_id) if str(cat_id).isdigit() else hash(cat_name) % (10**8)
+    np.random.seed(seed)
+    
+    adjectives = ["친환경", "북유럽풍", "모던", "프리미엄", "에센셜", "미니멀", "스마트", "럭셔리", "내추럴", "심플", "컴팩트", "가성비갑"]
+    types = ["클래식", "시그니처", "베이직", "플러스", "디럭스", "울트라", "이지", "컴포트"]
+    
+    product_names = []
+    num_products = 10
+    
+    for i in range(num_products):
+        adj = np.random.choice(adjectives)
+        tp = np.random.choice(types)
+        num = np.random.randint(1, 100)
+        
+        prod_name = f"{adj} {cat_name} {tp} {num:02d}"
+        clicks = int(np.random.lognormal(mean=7, sigma=0.8))
+        conversion_rate = float(np.random.beta(a=3, b=100) * 100)
+        
+        # 카테고리별 합리적 평균 단가 책정
+        if "패션" in cat_name or "의류" in cat_name:
+            avg_price = int(np.random.normal(loc=55000, scale=15000))
+        elif "디지털" in cat_name or "가전" in cat_name:
+            avg_price = int(np.random.normal(loc=450000, scale=120000))
+        elif "가구" in cat_name or "인테리어" in cat_name or "수납" in cat_name:
+            avg_price = int(np.random.normal(loc=120000, scale=35000))
+        else:
+            avg_price = int(np.random.normal(loc=35000, scale=10000))
+            
+        avg_price = max(5000, (avg_price // 1000) * 1000)
+        purchases = max(1, int(clicks * (conversion_rate / 100)))
+        revenue = purchases * avg_price
+        
+        product_names.append({
+            "상품명": prod_name,
+            "클릭수": clicks,
+            "구매전환율 (%)": round(conversion_rate, 2),
+            "추정 구매수": purchases,
+            "평균 단가 (원)": avg_price,
+            "추정 매출액 (원)": revenue
+        })
+        
+    return pd.DataFrame(product_names)
+
+def generate_mock_demographics(cat_name, cat_id):
+    """
+    카테고리명에 맞게 성별 및 연령대별 가중치가 적용된 데모 데이터를 시드 고정 방식으로 생성합니다.
+    """
+    seed = int(cat_id) if str(cat_id).isdigit() else hash(cat_name) % (10**8)
+    np.random.seed(seed)
+    
+    # 성비 편향 설정
+    female_ratio = 0.5
+    if any(k in cat_name for k in ["여성", "화장품", "뷰티", "육아", "식품", "주방", "수납"]):
+        female_ratio = np.random.uniform(0.70, 0.92)
+    elif any(k in cat_name for k in ["남성", "디지털", "가전", "IT", "게임", "자동차"]):
+        female_ratio = np.random.uniform(0.15, 0.35)
+    else:
+        female_ratio = np.random.uniform(0.40, 0.60)
+        
+    male_ratio = 1.0 - female_ratio
+    
+    # 연령 분포 설정
+    if "가전" in cat_name or "디지털" in cat_name or "IT" in cat_name:
+        age_distribution = np.random.dirichlet([2, 8, 8, 4, 2, 1])
+    elif "의류" in cat_name or "패션" in cat_name:
+        age_distribution = np.random.dirichlet([3, 7, 9, 6, 3, 1])
+    elif "육아" in cat_name:
+        age_distribution = np.random.dirichlet([1, 2, 12, 3, 1, 0.5])
+    else:
+        age_distribution = np.random.dirichlet([3, 5, 7, 7, 5, 3])
+        
+    ages = ["10대", "20대", "30대", "40대", "50대", "60대 이상"]
+    age_ratios = {ages[i]: round(age_distribution[i] * 100, 1) for i in range(len(ages))}
+    
+    return {
+        "gender": {"여성": round(female_ratio * 100, 1), "남성": round(male_ratio * 100, 1)},
+        "age": age_ratios
+    }
+
+def generate_mock_sales_trend(df_cat, avg_price_unit):
+    """
+    클릭수 지표(ratio)와 요일별 온라인 쇼핑 가중치, 카테고리별 단가를 조합하여 시계열 매출 추이를 유도합니다.
+    """
+    np.random.seed(42)
+    df_sales = df_cat.copy()
+    
+    # 요일별 쇼핑 가중치
+    df_sales["dayofweek"] = df_sales["period"].dt.dayofweek
+    weekday_weights = {0: 1.15, 1: 1.20, 2: 1.15, 3: 1.05, 4: 0.95, 5: 0.80, 6: 0.85}
+    df_sales["weight"] = df_sales["dayofweek"].map(weekday_weights)
+    
+    traffic_factor = 250
+    df_sales["추정 매출액"] = (df_sales["ratio"] * traffic_factor * df_sales["weight"] * avg_price_unit).astype(int)
+    
+    return df_sales[["period", "추정 매출액", "category"]]
+
 # UI 헬퍼 함수
 def make_card(title, value, subtitle="", color_class=""):
     st.markdown(f"""
