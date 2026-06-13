@@ -1,0 +1,30 @@
+=== 카이제곱 검정 (가구 형태 vs 선호 요인) ===
+p-value: 1.9159489976360724e-37
+
+=== 다중회귀분석 결과 ===
+                            OLS Regression Results                            
+==============================================================================
+Dep. Variable:        purchase_intent   R-squared:                       0.209
+Model:                            OLS   Adj. R-squared:                  0.207
+Method:                 Least Squares   F-statistic:                     131.3
+Date:                Mon, 08 Jun 2026   Prob (F-statistic):           2.37e-51
+Time:                        22:19:56   Log-Likelihood:                -548.21
+No. Observations:                1000   AIC:                             1102.
+Df Residuals:                     997   BIC:                             1117.
+Df Model:                           2                                         
+Covariance Type:            nonrobust                                         
+=========================================================================================
+                            coef    std err          t      P>|t|      [0.025      0.975]
+-----------------------------------------------------------------------------------------
+const                    -0.1072      0.074     -1.443      0.149      -0.253       0.039
+real_review_score         0.0949      0.016      5.753      0.000       0.063       0.127
+price_competitiveness     0.0710      0.005     15.438      0.000       0.062       0.080
+==============================================================================
+Omnibus:                      182.112   Durbin-Watson:                   1.976
+Prob(Omnibus):                  0.000   Jarque-Bera (JB):               70.624
+Skew:                          -0.456   Prob(JB):                     4.62e-16
+Kurtosis:                       2.070   Cond. No.                         41.8
+==============================================================================
+
+Notes:
+[1] Standard Errors assume that the covariance matrix of the errors is correctly specified.
