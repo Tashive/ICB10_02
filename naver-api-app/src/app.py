@@ -614,8 +614,18 @@ def set_menu(selected):
     """메뉴 선택 콜백 함수"""
     st.session_state["current_menu"] = selected
 
+# 종합 대시보드 섹션 (사이드바 최상단)
+st.sidebar.markdown('<div class="sidebar-section-header">종합 대시보드</div>', unsafe_allow_html=True)
+for item in ["🏠 종합 대시보드"]:
+    is_active = st.session_state["current_menu"] == item
+    btn_style = "primary" if is_active else "secondary"
+    if st.sidebar.button(item, key=f"menu_{item}", use_container_width=True, type=btn_style):
+        set_menu(item)
+        st.rerun()
+
 # 안내 섹션
-for item in ["🏠 종합 대시보드", "🏠 대시보드 소개"]:
+st.sidebar.markdown('<div class="sidebar-section-header">안내</div>', unsafe_allow_html=True)
+for item in ["🏠 대시보드 소개"]:
     is_active = st.session_state["current_menu"] == item
     btn_style = "primary" if is_active else "secondary"
     if st.sidebar.button(item, key=f"menu_{item}", use_container_width=True, type=btn_style):
