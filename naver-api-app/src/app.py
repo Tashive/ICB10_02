@@ -225,80 +225,6 @@ def generate_mock_sales_trend(df_cat, avg_price_unit):
     
     return df_sales[["period", "추정 매출액", "category"]]
 
-def parse_smartstore_data(file):
-    """
-    스마트스토어 상품/판매 실적 엑셀 또는 CSV 파일을 파싱하여 표준 칼럼 구조로 변환합니다.
-    """
-    try:
-        # 파일 확장자에 따라 판다스로 읽음
-        if file.name.endswith('.csv'):
-            try:
-                df = pd.read_csv(file, encoding='utf-8')
-            except UnicodeDecodeError:
-                df = pd.read_csv(file, encoding='cp949')
-        else:
-            df = pd.read_excel(file)
-            
-        # 컬럼 표준화 매핑 딕셔너리
-        column_mappings = {
-            "상품명": ["상품명", "물품명", "상품 이름", "Product Name"],
-            "상품ID": ["상품번호", "상품ID", "상품 번호", "Product ID"],
-            "클릭수": ["유입수", "클릭수", "조회수", "클릭", "Clicks", "Views"],
-            "구매수": ["결제수량", "구매수량", "구매수", "판매수량", "Sales Qty", "Purchases"],
-            "매출액": ["결제금액", "매출액", "판매금액", "매출", "Revenue", "Sales Amount"],
-            "구매전환율": ["구매전환율", "전환율", "구매전환율 (%)", "Conversion Rate"]
-        }
-        
-        standard_df = pd.DataFrame()
-        
-        for std_col, syn_list in column_mappings.items():
-            matched_col = None
-            for col in df.columns:
-                clean_col = str(col).strip().replace(" ", "").lower()
-                clean_syns = [str(syn).strip().replace(" ", "").lower() for syn in syn_list]
-                if clean_col in clean_syns or any(clean_syn in clean_col for clean_syn in clean_syns):
-                    matched_col = col
-                    break
-            
-            if matched_col is not None:
-                standard_df[std_col] = df[matched_col]
-            else:
-                if std_col == "상품명":
-                    raise ValueError("엑셀 파일 내에서 '상품명' 컬럼을 찾을 수 없습니다.")
-                elif std_col == "클릭수":
-                    standard_df["클릭수"] = 0
-                elif std_col == "구매수":
-                    standard_df["구매수"] = 0
-                elif std_col == "매출액":
-                    standard_df["매출액"] = 0
-                elif std_col == "구매전환율":
-                    standard_df["구매전환율"] = 0.0
-                    
-        standard_df["상품명"] = standard_df["상품명"].astype(str)
-        if "상품ID" in standard_df.columns:
-            standard_df["상품ID"] = standard_df["상품ID"].astype(str)
-        else:
-            standard_df["상품ID"] = [f"MOCK_{i}" for i in range(len(standard_df))]
-            
-        standard_df["클릭수"] = pd.to_numeric(standard_df["클릭수"], errors='coerce').fillna(0).astype(int)
-        standard_df["구매수"] = pd.to_numeric(standard_df["구매수"], errors='coerce').fillna(0).astype(int)
-        standard_df["매출액"] = pd.to_numeric(standard_df["매출액"], errors='coerce').fillna(0).astype(int)
-        standard_df["구매전환율"] = pd.to_numeric(standard_df["구매전환율"], errors='coerce').fillna(0.0).astype(float)
-        
-        mask = (standard_df["구매전환율"] == 0.0) & (standard_df["클릭수"] > 0)
-        standard_df.loc[mask, "구매전환율"] = (standard_df.loc[mask, "구매수"] / standard_df.loc[mask, "클릭수"] * 100).round(2)
-        
-        standard_df["평균 단가 (원)"] = 0
-        price_mask = standard_df["구매수"] > 0
-        standard_df.loc[price_mask, "평균 단가 (원)"] = (standard_df.loc[price_mask, "매출액"] / standard_df.loc[price_mask, "구매수"]).astype(int)
-        
-        zero_price_mask = standard_df["평균 단가 (원)"] == 0
-        standard_df.loc[zero_price_mask, "평균 단가 (원)"] = 35000
-        
-        return standard_df
-    except Exception as e:
-        raise ValueError(f"파일 파싱 중 에러 발생: {str(e)}")
-
 # UI 헬퍼 함수
 def make_card(title, value, subtitle="", color_class=""):
     st.markdown(f"""
@@ -700,15 +626,94 @@ elif menu == "🛍️ 쇼핑 트렌드 분석":
                                     
                                     # 4차 카테고리
                                     with col_c4:
-                                        # 세션 상태에 쇼핑 분석 실행 상태 및 데이터 보관 변수 초기화
-    if "shopping_run" not in st.session_state:
-        st.session_state["shopping_run"] = False
-    if "shopping_df_all" not in st.session_state:
-        st.session_state["shopping_df_all"] = None
-    if "shopping_store_df" not in st.session_state:
-        st.session_state["shopping_store_df"] = None
-    if "shopping_df_list_len" not in st.session_state:
-        st.session_state["shopping_df_list_len"] = 0
+                                        cat4_data = cat3_info.get("sub", {})
+                                        if cat4_data:
+                                            cat4_list = ["선택 안 함"] + list(cat4_data.keys())
+                                            selected_cat4 = st.selectbox("4차 카테고리", cat4_list)
+                                            if selected_cat4 != "선택 안 함":
+                                                cat4_info = cat4_data[selected_cat4]
+                                                target_name = selected_cat4
+                                                target_id = cat4_info
+                                        else:
+                                            st.selectbox("4차 카테고리", ["하위 없음"], disabled=True)
+                                else:
+                                    target_name = selected_cat3
+                                    target_id = cat3_info
+                                    with col_c4:
+                                        st.selectbox("4차 카테고리", ["하위 없음"], disabled=True)
+                        else:
+                            st.selectbox("3차 카테고리", ["하위 없음"], disabled=True)
+                            with col_c4:
+                                st.selectbox("4차 카테고리", ["하위 없음"], disabled=True)
+            else:
+                st.selectbox("2차 카테고리", ["하위 없음"], disabled=True)
+                with col_c3:
+                    st.selectbox("3차 카테고리", ["하위 없음"], disabled=True)
+                with col_c4:
+                    st.selectbox("4차 카테고리", ["하위 없음"], disabled=True)
+                    
+    else:  # 직접 입력
+        col_in1, col_in2 = st.columns(2)
+        with col_in1:
+            custom_name = st.text_input("카테고리명 입력 (예: 여성 재킷)", placeholder="비교할 카테고리 이름을 입력하세요.")
+        with col_in2:
+            custom_id = st.text_input("카테고리 ID 입력 (예: 50000813)", placeholder="네이버 쇼핑 카테고리 ID 8자리를 입력하세요.")
+            
+        if custom_name and custom_id:
+            target_name = custom_name.strip()
+            target_id = custom_id.strip()
+
+    # 카테고리 추가 버튼
+    col_btn, _ = st.columns([1, 3])
+    with col_btn:
+        if st.button("➕ 비교 목록에 추가", use_container_width=True):
+            if not target_name or not target_id:
+                st.warning("추가할 카테고리를 선택하거나 입력해 주세요.")
+            else:
+                exists = any(c["id"] == target_id for c in st.session_state["selected_shopping_categories"])
+                if exists:
+                    st.warning("이미 추가된 카테고리입니다.")
+                else:
+                    st.session_state["selected_shopping_categories"].append({
+                        "name": target_name,
+                        "id": target_id
+                    })
+                    st.success(f"'{target_name}'({target_id}) 카테고리가 추가되었습니다.")
+                    st.rerun()
+
+    # 현재 추가된 카테고리 리스트 표시 및 삭제 기능
+    st.markdown("#### 📋 현재 선택된 비교 대상")
+    if not st.session_state["selected_shopping_categories"]:
+        st.info("비교 대상 카테고리가 없습니다. 상단에서 카테고리를 선택해 추가해 주세요.")
+    else:
+        for idx, cat in enumerate(st.session_state["selected_shopping_categories"]):
+            c_name, c_id = cat["name"], cat["id"]
+            col_label, col_del = st.columns([5, 1])
+            with col_label:
+                st.markdown(f"🏷️ **{c_name}** `(ID: {c_id})`")
+            with col_del:
+                if st.button("삭제", key=f"del_{idx}_{c_id}", type="secondary"):
+                    st.session_state["selected_shopping_categories"].pop(idx)
+                    st.rerun()
+
+    st.markdown("---")
+    st.markdown("#### 📅 기타 검색 조건")
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        time_unit = st.selectbox("구간 단위", ["date", "week", "month"], index=0, format_func=lambda x: {"date": "일간", "week": "주간", "month": "월간"}[x])
+    with col2:
+        start_date = st.date_input("시작일", value=datetime.now() - timedelta(days=90))
+    with col3:
+        end_date = st.date_input("종료일", value=datetime.now())
+        
+    col4, col5, col6 = st.columns(3)
+    with col4:
+        device = st.selectbox("기기 필터", ["", "pc", "mo"], format_func=lambda x: {"": "전체 기기", "pc": "PC", "mo": "모바일"}[x])
+    with col5:
+        gender = st.selectbox("성별 필터", ["", "f", "m"], format_func=lambda x: {"": "전체 성별", "f": "여성", "m": "남성"}[x])
+    with col6:
+        ages = st.multiselect("연령대 필터 (선택 안 하면 전체)", options=["10", "20", "30", "40", "50", "60"])
 
     if st.button("쇼핑 트렌드 분석 실행", type="primary"):
         if not st.session_state["selected_shopping_categories"]:
@@ -746,180 +751,200 @@ elif menu == "🛍️ 쇼핑 트렌드 분석":
                     else:
                         df_all = pd.concat(df_list, ignore_index=True)
                         
-                        # 스마트스토어 파일 업로드 확인 및 파싱
-                        store_df = None
-                        if uploaded_file is not None:
-                            try:
-                                store_df = parse_smartstore_data(uploaded_file)
-                                # 각 상품의 소속 카테고리를 추정하는 컬럼 추가 (키워드 기반 자동 매핑)
-                                store_df["매핑 카테고리"] = "미분류"
-                                for idx, row in store_df.iterrows():
-                                    prod_name = row["상품명"]
-                                    for cat in st.session_state["selected_shopping_categories"]:
-                                        cat_name = cat["name"]
-                                        # 상품명에 카테고리명이 포함되는지 지능형 체크
-                                        if cat_name in prod_name or prod_name.replace(" ", "") in cat_name or any(part in prod_name for part in cat_name.split("/")) or (len(cat_name) >= 3 and cat_name[:3] in prod_name):
-                                            store_df.at[idx, "매핑 카테고리"] = cat_name
-                                            break
-                            except Exception as e:
-                                st.error(f"❌ 스마트스토어 데이터 파싱 실패: {str(e)}")
-                                store_df = None
+                        # 탭 인터페이스 구성
+                        tab1, tab2, tab3 = st.tabs(["📈 클릭 트렌드 & 기본 통계", "👥 성별/연령 및 매출액 추이", "🏆 개별 상품 랭킹 보드"])
                         
-                                                text="액션 이행률",
-                                                x=0.5, y=0.1,
-                                                showarrow=False,
-                                                font=dict(size=12, color="#94a3b8")
-                                            )
-                                        ]
-                                    )
-                                    fig.update_xaxes(visible=False)
-                                    fig.update_yaxes(visible=False)
-                                    return fig
-                                    
-                                st.markdown("<div style='text-align: center; font-size: 13px; font-weight: 600; color: #94a3b8;'>🎯 마케팅 액션 달성 현황</div>", unsafe_allow_html=True)
-                                st.plotly_chart(create_semi_donut(completion_rate), use_container_width=True, config={'displayModeBar': False})
-                                
-                            # Q2-2 추가. 마케팅 액션 체크 리스트 실시간 인터랙션 아코디언
-                            if total_actions_cnt > 0:
-                                with st.expander("📝 금주 실행 마케팅 액션 체크리스트 (달성률 실시간 반영)"):
-                                    st.markdown("본 진단 보고서에 기반해 도출된 액션을 실행하고 체크해 주세요. 달성률 게이지가 실시간으로 갱신됩니다.")
-                                    for p_name, action_desc, key in action_todos:
-                                        checked = st.checkbox(
-                                            f"📦 **{p_name}** - {action_desc}",
-                                            value=st.session_state["completed_actions"].get(key, False),
-                                            key=key
+                        with tab1:
+                            # KPI 카드 배치
+                            st.markdown("### 🛍️ 카테고리별 트렌드 지표 요약")
+                            kpi_cols = st.columns(len(df_list))
+                            for i, cat in enumerate(st.session_state["selected_shopping_categories"]):
+                                cat_name = cat["name"]
+                                cat_df = df_all[df_all["category"] == cat_name]
+                                if not cat_df.empty:
+                                    mean_val = cat_df["ratio"].mean()
+                                    max_row = cat_df.loc[cat_df["ratio"].idxmax()]
+                                    colors = ["text-green", "text-blue", "text-purple", "text-green", "text-blue"]
+                                    with kpi_cols[i]:
+                                        make_card(
+                                            f"🛍️ {cat_name} 평균 클릭지표", 
+                                            f"{mean_val:.2f}%", 
+                                            f"최대치: {max_row['ratio']:.2f}% ({max_row['period'].strftime('%Y-%m-%d')})",
+                                            color_class=colors[i % len(colors)]
                                         )
-                                        if checked != st.session_state["completed_actions"].get(key, False):
-                                            st.session_state["completed_actions"][key] = checked
-                                            st.rerun()
-                                            
-                            # 상세 탭 구성
-                            detail_tabs = st.tabs([
-                                "🌟 스타", 
-                                "📈 성장 기회", 
-                                "⚠️ 노출 과다", 
-                                "🔍 개선 필요"
-                            ])
-                            
-                            with detail_tabs[0]:
-                                st.markdown("#### 🌟 스타 (Star - 핵심 주력) 마케팅 액션")
-                                if quadrants["스타 (핵심 주력)"]:
-                                    st.markdown("**대상 상품:**")
-                                    for p in quadrants["스타 (핵심 주력)"]:
-                                        st.markdown(f"- 📦 `{p[0]}` (클릭: {p[1]:,}회 | 전환율: {p[2]:.2f}% | 매출: {p[3]:,}원)")
-                                else:
-                                    st.info("이 카테고리에 해당하는 상품이 없습니다.")
-                                st.markdown("""
-                                **현 상태:** 높은 인지도와 훌륭한 구매 설득력을 모두 갖춘 주력 상품군입니다.
-                                **추천 액션:**
-                                1. **재고 확보 및 배송 관리:** 품절로 인한 판매 기회 유실을 최우선적으로 방지합니다.
-                                2. **리뷰 관리 및 평점 최적화:** 구매 고객의 긍정 리뷰를 전면에 배치하고 부정 피드백에 신속 대응합니다.
-                                3. **노출 시너지 확보:** 네이버 쇼핑 검색 광고의 키워드 순위를 상위권으로 유지하며 브랜드 키워드 광고를 병행합니다.
-                                """)
                                 
-                            with detail_tabs[1]:
-                                st.markdown("#### 📈 성장 기회 (Growth - 노출 부족) 마케팅 액션")
-                                if quadrants["성장 기회 (노출 확대 대상)"]:
-                                    st.markdown("**대상 상품:**")
-                                    for p in quadrants["성장 기회 (노출 확대 대상)"]:
-                                        st.markdown(f"- 📦 `{p[0]}` (클릭: {p[1]:,}회 | 전환율: {p[2]:.2f}% | 매출: {p[3]:,}원)")
-                                else:
-                                    st.info("이 카테고리에 해당하는 상품이 없습니다.")
-                                st.markdown("""
-                                **현 상태:** 상품의 가격, 혜택, 상세페이지 등 설득력은 우수하나 유입되는 고객 수(노출)가 부족한 형태입니다.
-                                **추천 액션:**
-                                1. **검색 노출 최적화 (SEO):** 상품명에 네이버 쇼핑 트렌드 인기 키워드를 반영하고 태그 설정을 고도화합니다.
-                                2. **광고 예산 증액:** 저평가된 해당 상품군에 네이버 쇼핑 검색 광고나 성과형 디스플레이 광고(GFA) 예산을 늘려 유입을 강제로 유도합니다.
-                                3. **외부 채널 활용:** 블로그, SNS(인스타그램 등) 공동구매나 체험단을 진행하여 트래픽 유입 경로를 다각화합니다.
-                                """)
-                                
-                            with detail_tabs[2]:
-                                st.markdown("#### ⚠️ 노출 과다 (Exposure - 전환율 개선 필요) 마케팅 액션")
-                                if quadrants["노출 과다 (비효율 상태)"]:
-                                    st.markdown("**대상 상품:**")
-                                    for p in quadrants["노출 과다 (비효율 상태)"]:
-                                        st.markdown(f"- 📦 `{p[0]}` (클릭: {p[1]:,}회 | 전환율: {p[2]:.2f}% | 매출: {p[3]:,}원)")
-                                else:
-                                    st.info("이 카테고리에 해당하는 상품이 없습니다.")
-                                st.markdown("""
-                                **현 상태:** 특정 키워드나 상품 노출수(클릭수)가 전체 상위 15% 이내로 리소스가 과다 투입되고 있으나, 구매 전환율이 브랜드 평균 미만인 비효율 상태입니다.
-                                **추천 액션:**
-                                1. **광고 효율화 및 타겟 튜닝:** 비효율적인 유도 키워드의 입찰가를 조정하거나, 광고 노출 제외 키워드를 설정해 광고비를 세이브합니다.
-                                2. **소재 및 카피 변경:** 유입 의도와 랜딩 페이지 간의 불일치를 해소하기 위해 메인 키 비주얼 및 썸네일을 교체합니다.
-                                """)
-                                
-                            with detail_tabs[3]:
-                                st.markdown("#### 🔍 개선 필요 (Underperforming - 유입/설득 부족) 마케팅 액션")
-                                if quadrants["개선 필요 (유입 대비 저조)"]:
-                                    st.markdown("**대상 상품:**")
-                                    for p in quadrants["개선 필요 (유입 대비 저조)"]:
-                                        st.markdown(f"- 📦 `{p[0]}` (클릭: {p[1]:,}회 | 전환율: {p[2]:.2f}% | 매출: {p[3]:,}원)")
-                                else:
-                                    st.info("이 카테고리에 해당하는 상품이 없습니다.")
-                                st.markdown("""
-                                **현 상태:** 상세페이지 유입률(클릭수)은 상위 20% 이내로 높으나, 최종 구매 전환율이 하위 30% 미만으로 급격히 떨어지는 고관심-저전환 병목 상품군입니다.
-                                **추천 액션:**
-                                1. **상세페이지 구조/옵션 개편:** 고객 유입 의도 대비 콘텐츠, 옵션 구성(예: 수납장 사이즈/중분류 미비 등)에 누수가 없는지 확인하고 소구점을 보완합니다.
-                                2. **구매 장벽 제거:** 옵션가가 지나치게 붙는 가격 설계인지 점검하고, 즉시 할인 쿠폰 제공이나 세트 묶음 혜택을 추가해 이탈을 방지합니다.
-                                """)
-                                
-                            # 마크다운 리포트 생성 및 다운로드 버튼 제공
-                            report_content = f"""# 📊 [스마트스토어 상품 포트폴리오 마케팅 진단 보고서]
-- **기준 카테고리**: {selected_rank_cat_name}
-- **진단 일시**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-- **분류 임계치**: 클릭 상위 15%({int(c_top15)}) | 클릭 상위 20%({int(c_top20)}) | 평균 전환율({cvr_mean:.2f}%) | 전환율 하위 30%({cvr_bottom30:.2f}%)
-
----
-
-## 1. 포지셔닝 요약
-- **🌟 스타 (Star - 핵심 주력)**: {len(quadrants["스타 (핵심 주력)"])}개 상품
-- **📈 성장 기회 (Growth - 노출 확대 대상)**: {len(quadrants["성장 기회 (노출 확대 대상)"])}개 상품
-- **⚠️ 노출 과다 (Exposure - 비효율 상태)**: {len(quadrants["노출 과다 (비효율 상태)"])}개 상품
-- **🔍 개선 필요 (Underperforming - 유입 대비 저조)**: {len(quadrants["개선 필요 (유입 대비 저조)"])}개 상품
-
----
-
-## 2. 그룹별 진단 및 마케팅 추천 액션
-
-### 🌟 스타 (Star - 핵심 주력)
-- **대상 상품**: {', '.join([f"'{p[0]}'" for p in quadrants["스타 (핵심 주력)"]]) if quadrants["스타 (핵심 주력)"] else '없음'}
-- **현 상태**: 높은 인지도와 구매 설득력을 모두 갖춘 안정적인 핵심 상품군입니다.
-- **추천 액션**:
-  1. **재고 확보 및 배송 관리**: 품절로 인한 판매 기회 유실 방지.
-  2. **리뷰 관리 및 평점 최적화**: 긍정 후기 전면 배치 및 상세 관리.
-  3. **노출 시너지 확보**: 쇼핑 검색 광고 상위 순위 유지.
-
-### 📈 성장 기회 (Growth - 노출 확대 대상)
-- **대상 상품**: {', '.join([f"'{p[0]}'" for p in quadrants["성장 기회 (노출 확대 대상)"]]) if quadrants["성장 기회 (노출 확대 대상)"] else '없음'}
-- **현 상태**: 전환력은 뛰어나나 유입량(노출)이 부족한 잠재 성장 자산입니다.
-- **추천 액션**:
-  1. **검색 노출 최적화 (SEO)**: 검색어 트렌드 인기 키워드 매칭 반영.
-  2. **광고 예산 증액**: 타겟 트래픽 유입 강제 유도.
-  3. **외부 채널 활용**: 바이럴 및 SNS 체험단 채널 다각화.
-
-### ⚠️ 노출 과다 (Exposure - 비효율 상태)
-- **대상 상품**: {', '.join([f"'{p[0]}'" for p in quadrants["노출 과다 (비효율 상태)"]]) if quadrants["노출 과다 (비효율 상태)"] else '없음'}
-- **현 상태**: 노출과 클릭수(상위 15% 이내)는 충분히 발생하나 전환율이 브랜드 평균 미만인 광고 비효율 영역입니다.
-- **추천 액션**:
-  1. **광고 효율화 및 타겟 튜닝**: 키워드 비딩 조율 및 제외 키워드 추가.
-  2. **소재 및 카피 변경**: 썸네일 및 카피 문구 개편을 통한 매칭 일치성 개선.
-
-### 🔍 개선 필요 (Underperforming - 유입 대비 저조)
-- **대상 상품**: {', '.join([f"'{p[0]}'" for p in quadrants["개선 필요 (유입 대비 저조)"]]) if quadrants["개선 필요 (유입 대비 저조)"] else '없음'}
-- **현 상태**: 클릭수는 상위 20% 이내이나, 최종 구매 전환율이 하위 30% 미만으로 급락하는 병목 현상 발생군입니다.
-- **추천 액션**:
-  1. **상세페이지 구조/옵션 개편**: 옵션 명세(수납장 규격 미비 등) 및 소구점 정밀 재설계.
-  2. **구매 장벽 제거**: 옵션가 재설계 및 혜택 추가(즉시 쿠폰 등).
-"""
-                            
-                            st.markdown("#### 📥 진단 보고서 내보내기")
-                            st.download_button(
-                                label="📥 마케팅 진단 보고서 마크다운(.md) 파일 다운로드",
-                                data=report_content.encode('utf-8'),
-                                file_name=f"smartstore_marketing_report_{selected_rank_cat_name}_{datetime.now().strftime('%Y%m%d')}.md",
-                                mime="text/markdown",
-                                key="download_marketing_report_btn"
+                            # 트렌드 시각화
+                            st.markdown("### 📈 카테고리별 쇼핑 클릭 트렌드 추이 비교")
+                            fig = px.line(
+                                df_all, x="period", y="ratio", color="category",
+                                labels={"period": "날짜", "ratio": "클릭 비율 (%)", "category": "카테고리"},
+                                title="선택한 쇼핑 분야별 상대적 클릭량 추이 (가장 높은 시점 = 100)",
+                                template="plotly_dark"
                             )
+                            fig.update_layout(
+                                hovermode="x unified",
+                                plot_bgcolor="rgba(0,0,0,0)",
+                                paper_bgcolor="rgba(0,0,0,0)"
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+                            
+                            # 상세 기술통계 테이블
+                            st.markdown("### 📊 카테고리별 세부 기술통계 및 분석")
+                            stat_df = df_all.groupby("category")["ratio"].describe().reset_index()
+                            
+                            # 왜도, 첨도, 변동계수 계산
+                            stats_extra = df_all.groupby("category")["ratio"].agg(
+                                skew="skew",
+                                kurtosis=lambda x: x.kurtosis(),
+                                cv=lambda x: x.std() / x.mean() if x.mean() != 0 else 0
+                            ).reset_index()
+                            
+                            stat_df = stat_df.merge(stats_extra, on="category")
+                            stat_df.columns = ["카테고리명", "데이터 수", "평균", "표준편차", "최소값", "25%", "중앙값(50%)", "75%", "최대값", "왜도 (Skewness)", "첨도 (Kurtosis)", "변동계수 (CV)"]
+                            
+                            st.dataframe(
+                                stat_df.style.background_gradient(cmap="BuGn", subset=["평균", "최대값"])
+                                .format({"평균": "{:.2f}", "표준편차": "{:.2f}", "왜도 (Skewness)": "{:.2f}", "첨도 (Kurtosis)": "{:.2f}", "변동계수 (CV)": "{:.2f}"}),
+                                use_container_width=True
+                            )
+                            
+                            # CSV 다운로드
+                            csv = df_all.to_csv(index=False).encode('utf-8')
+                            st.download_button(
+                                label="📥 CSV 파일로 쇼핑 트렌드 데이터 다운로드",
+                                data=csv,
+                                file_name=f"naver_shopping_trend_{datetime.now().strftime('%Y%m%d')}.csv",
+                                mime="text/csv"
+                            )
+                            
+                        with tab2:
+                            st.markdown("### 👥 카테고리별 성별 및 연령대 클릭 분포 분석")
+                            
+                            for cat in st.session_state["selected_shopping_categories"]:
+                                cat_name = cat["name"]
+                                cat_id = cat["id"]
+                                
+                                st.markdown(f"#### 🏷️ {cat_name} 인구통계학적 특성")
+                                demo = generate_mock_demographics(cat_name, cat_id)
+                                
+                                col_d1, col_d2 = st.columns(2)
+                                with col_d1:
+                                    # 성별 분포 파이 차트
+                                    df_gender = pd.DataFrame(list(demo["gender"].items()), columns=["성별", "비율"])
+                                    fig_gender = px.pie(
+                                        df_gender, values="비율", names="성별",
+                                        title=f"{cat_name} 성별 관심도 분포",
+                                        color="성별",
+                                        color_discrete_map={"여성": "#ec4899", "남성": "#3b82f6"},
+                                        hole=0.4,
+                                        template="plotly_dark"
+                                    )
+                                    fig_gender.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+                                    st.plotly_chart(fig_gender, use_container_width=True)
+                                    
+                                with col_d2:
+                                    # 연령대 분포 바 차트
+                                    df_age = pd.DataFrame(list(demo["age"].items()), columns=["연령대", "비율"])
+                                    fig_age = px.bar(
+                                        df_age, x="연령대", y="비율",
+                                        title=f"{cat_name} 연령대별 관심도 분포",
+                                        color="연령대",
+                                        color_discrete_sequence=px.colors.sequential.Sunsetdark,
+                                        template="plotly_dark"
+                                    )
+                                    fig_age.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", showlegend=False)
+                                    st.plotly_chart(fig_age, use_container_width=True)
+                                    
+                            # 매출 추이 시각화
+                            st.markdown("### 💰 카테고리별 일일 추정 매출액 추이")
+                            sales_list = []
+                            for cat in st.session_state["selected_shopping_categories"]:
+                                cat_name = cat["name"]
+                                cat_id = cat["id"]
+                                cat_df = df_all[df_all["category"] == cat_name]
+                                
+                                # 가상의 평균단가 설정
+                                if "패션" in cat_name or "의류" in cat_name:
+                                    avg_price = 55000
+                                elif "디지털" in cat_name or "가전" in cat_name:
+                                    avg_price = 450000
+                                elif "가구" in cat_name or "인테리어" in cat_name or "수납" in cat_name:
+                                    avg_price = 120000
+                                else:
+                                    avg_price = 35000
+                                    
+                                df_sales = generate_mock_sales_trend(cat_df, avg_price)
+                                sales_list.append(df_sales)
+                                
+                            if sales_list:
+                                df_sales_all = pd.concat(sales_list, ignore_index=True)
+                                fig_sales = px.line(
+                                    df_sales_all, x="period", y="추정 매출액", color="category",
+                                    labels={"period": "날짜", "추정 매출액": "추정 매출액 (원)", "category": "카테고리"},
+                                    title="일일 추정 매출액 변동 추이 (요일별 가중치 및 단가 반영)",
+                                    template="plotly_dark"
+                                )
+                                fig_sales.update_layout(
+                                    hovermode="x unified",
+                                    plot_bgcolor="rgba(0,0,0,0)",
+                                    paper_bgcolor="rgba(0,0,0,0)"
+                                )
+                                fig_sales.update_yaxes(tickformat=",d")
+                                st.plotly_chart(fig_sales, use_container_width=True)
+                                
+                        with tab3:
+                            st.markdown("### 🏆 카테고리별 개별 상품 랭킹 보드")
+                            
+                            # 비교 대상 카테고리 중 하나 선택
+                            cat_names = [cat["name"] for cat in st.session_state["selected_shopping_categories"]]
+                            selected_rank_cat_name = st.selectbox("랭킹 보드를 조회할 카테고리를 선택하세요:", cat_names)
+                            
+                            # 선택한 카테고리의 정보 찾기
+                            selected_cat_info = next(c for c in st.session_state["selected_shopping_categories"] if c["name"] == selected_rank_cat_name)
+                            selected_cat_id = selected_cat_info["id"]
+                            
+                            st.markdown(f"#### 🥇 {selected_rank_cat_name} 상품별 실적 순위 (클릭수 및 전환율)")
+                            df_products = generate_mock_products(selected_rank_cat_name, selected_cat_id)
+                            
+                            # 랭킹 정렬 기준 선택
+                            sort_by = st.radio("랭킹 기준 설정", ["추정 매출액 순", "클릭수 순", "구매전환율 순"], horizontal=True)
+                            
+                            if sort_by == "추정 매출액 순":
+                                df_sorted = df_products.sort_values(by="추정 매출액 (원)", ascending=False).reset_index(drop=True)
+                            elif sort_by == "클릭수 순":
+                                df_sorted = df_products.sort_values(by="클릭수", ascending=False).reset_index(drop=True)
+                            else:
+                                df_sorted = df_products.sort_values(by="구매전환율 (%)", ascending=False).reset_index(drop=True)
+                                
+                            df_sorted.index = df_sorted.index + 1
+                            df_sorted.index.name = "순위"
+                            
+                            st.dataframe(
+                                df_sorted.style.background_gradient(cmap="Oranges", subset=["클릭수", "추정 매출액 (원)"])
+                                .format({"구매전환율 (%)": "{:.2f}%", "평균 단가 (원)": "{:,.0f}원", "추정 매출액 (원)": "{:,.0f}원", "클릭수": "{:,.0f}", "추정 구매수": "{:,.0f}"}),
+                                use_container_width=True
+                            )
+                            
+                            # 2차원 산점도를 통한 포트폴리오 분석 (BCG 매트릭스 타입)
+                            st.markdown("#### 📊 상품 포트폴리오 분석 (클릭수 vs 구매전환율)")
+                            st.markdown("""
+                            * **스타 (우측 상단)**: 클릭수(유입량)와 구매전환율(선호도)이 모두 높은 핵심 상품입니다.
+                            * **성장 기회 (좌측 상단)**: 구매전환율은 높으나 유입(클릭수)이 부족해 마케팅 노출 증대가 필요한 상품입니다.
+                            * **노출 과다 (우측 하단)**: 클릭수는 높으나 구매전환율이 낮아 상세페이지나 가격 경쟁력 개선이 필요한 상품입니다.
+                            """)
+                            
+                            fig_scatter = px.scatter(
+                                df_products, x="클릭수", y="구매전환율 (%)",
+                                size="추정 매출액 (원)", color="추정 매출액 (원)",
+                                text="상품명",
+                                color_continuous_scale="Viridis",
+                                title=f"{selected_rank_cat_name} 상품별 마케팅 포지셔닝 맵 (원 크기 = 매출액)",
+                                labels={"클릭수": "클릭수 (유입량)", "구매전환율 (%)": "구매전환율 (%)", "추정 매출액 (원)": "추정 매출액 (원)"},
+                                template="plotly_dark"
+                            )
+                            fig_scatter.update_traces(textposition='top center')
+                            fig_scatter.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+                            st.plotly_chart(fig_scatter, use_container_width=True)
                 except Exception as e:
                     err_msg = str(e)
                     st.error(f"🚨 쇼핑 트렌드 데이터를 불러오지 못했습니다: {err_msg}")
