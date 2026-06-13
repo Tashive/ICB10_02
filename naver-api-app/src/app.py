@@ -369,6 +369,7 @@ menu_all = [
     "🏠 대시보드 소개",
     "📈 검색어 트렌드 분석",
     "🛍️ 쇼핑 트렌드 분석",
+    "📦 내 쇼핑몰 상품 진단",
     "🛒 쇼핑 검색 분석",
     "📝 블로그 검색 분석",
     "👥 카페글 검색 분석",
@@ -394,6 +395,15 @@ for item in ["🏠 대시보드 소개"]:
 # 데이터랩 트렌드 분석 섹션
 st.sidebar.markdown('<div class="sidebar-section-header">데이터랩 트렌드 분석</div>', unsafe_allow_html=True)
 for item in ["📈 검색어 트렌드 분석", "🛍️ 쇼핑 트렌드 분석"]:
+    is_active = st.session_state["current_menu"] == item
+    btn_style = "primary" if is_active else "secondary"
+    if st.sidebar.button(item, key=f"menu_{item}", use_container_width=True, type=btn_style):
+        set_menu(item)
+        st.rerun()
+
+# 쇼핑몰 매출 실적 분석 섹션
+st.sidebar.markdown('<div class="sidebar-section-header">쇼핑몰 매출 실적 분석</div>', unsafe_allow_html=True)
+for item in ["📦 내 쇼핑몰 상품 진단"]:
     is_active = st.session_state["current_menu"] == item
     btn_style = "primary" if is_active else "secondary"
     if st.sidebar.button(item, key=f"menu_{item}", use_container_width=True, type=btn_style):
@@ -454,6 +464,7 @@ menu_title_map = {
     "🏠 대시보드 소개": "대시보드 소개",
     "📈 검색어 트렌드 분석": "검색어 트렌드",
     "🛍️ 쇼핑 트렌드 분석": "쇼핑 트렌드 (인사이트)",
+    "📦 내 쇼핑몰 상품 진단": "내 쇼핑몰 상품 진단",
     "🛒 쇼핑 검색 분석": "쇼핑 검색",
     "📝 블로그 검색 분석": "블로그 검색",
     "👥 카페글 검색 분석": "카페글 검색",
@@ -486,18 +497,18 @@ if menu == "🏠 대시보드 소개":
     with col2:
         st.markdown("""
         <div class="metric-card">
-            <div style="font-size: 28px; margin-bottom: 10px;">🔍</div>
-            <div style="color: #3b82f6; font-weight: 700; font-size: 16px; margin-bottom: 6px;">검색 데이터 다차원 분석</div>
-            <div style="color: #94a3b8; font-size: 13px; line-height: 1.6;">쇼핑, 블로그, 카페, 뉴스 검색 데이터를 수집하고 다각도로 분석합니다.</div>
+            <div style="font-size: 28px; margin-bottom: 10px;">📦</div>
+            <div style="color: #8b5cf6; font-weight: 700; font-size: 16px; margin-bottom: 6px;">내 쇼핑몰 상품 진단</div>
+            <div style="color: #94a3b8; font-size: 13px; line-height: 1.6;">쇼핑몰 판매/실적 리포트를 업로드하여 BCG 분석과 맞춤형 액션 플랜을 제안합니다.</div>
         </div>
         """, unsafe_allow_html=True)
     col3, col4 = st.columns(2)
     with col3:
         st.markdown("""
         <div class="metric-card">
-            <div style="font-size: 28px; margin-bottom: 10px;">📊</div>
-            <div style="color: #8b5cf6; font-weight: 700; font-size: 16px; margin-bottom: 6px;">인터랙티브 시각화</div>
-            <div style="color: #94a3b8; font-size: 13px; line-height: 1.6;">모든 차트는 Plotly 기반으로 인터랙티브하게 제공됩니다.</div>
+            <div style="font-size: 28px; margin-bottom: 10px;">🔍</div>
+            <div style="color: #3b82f6; font-weight: 700; font-size: 16px; margin-bottom: 6px;">검색 데이터 다차원 분석</div>
+            <div style="color: #94a3b8; font-size: 13px; line-height: 1.6;">쇼핑, 블로그, 카페, 뉴스 검색 데이터를 수집하고 다각도로 분석합니다.</div>
         </div>
         """, unsafe_allow_html=True)
     with col4:
@@ -511,7 +522,7 @@ if menu == "🏠 대시보드 소개":
     st.stop()
 
 # API 키 누락 예외 처리
-if not client_id or not client_secret:
+if menu != "📦 내 쇼핑몰 상품 진단" and (not client_id or not client_secret):
     st.info("👈 왼쪽 사이드바 하단의 **NAVER API 설정**에서 Client ID와 Client Secret을 먼저 입력해 주세요.")
     st.stop()
 
