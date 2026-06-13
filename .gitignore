@@ -116,6 +116,8 @@ htmlcov/
 .*
 !.gitignore
 !**/.gitkeep
+!**/.streamlit/
+!**/.streamlit/**
 !naver-api-app/data/
 
 
