@@ -130,8 +130,12 @@ def make_card(title, value, subtitle="", color_class=""):
 st.sidebar.markdown("### 🔑 Naver API Credentials")
 
 # st.secrets 또는 st.session_state에서 API key 로드 시도
-secrets_client_id = st.secrets.get("NAVER_CLIENT_ID", "")
-secrets_client_secret = st.secrets.get("NAVER_CLIENT_SECRET", "")
+try:
+    secrets_client_id = st.secrets.get("NAVER_CLIENT_ID", "")
+    secrets_client_secret = st.secrets.get("NAVER_CLIENT_SECRET", "")
+except Exception:
+    secrets_client_id = ""
+    secrets_client_secret = ""
 
 default_client_id = secrets_client_id if secrets_client_id else st.session_state.get("client_id", "")
 default_client_secret = secrets_client_secret if secrets_client_secret else st.session_state.get("client_secret", "")

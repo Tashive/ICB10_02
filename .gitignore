@@ -120,4 +120,8 @@ htmlcov/
 !**/.streamlit/**
 !naver-api-app/data/
 
+# Streamlit secrets (Credentials)
+**/.streamlit/secrets.toml
+
+
 
