@@ -69,6 +69,14 @@ st.markdown("""
         color: #8b5cf6 !important;
         font-weight: 800;
     }
+    .text-red {
+        color: #ef4444 !important;
+        font-weight: 800;
+    }
+    .text-orange {
+        color: #f97316 !important;
+        font-weight: 800;
+    }
     
     /* 헤더 스타일 */
     .dashboard-title {
@@ -789,6 +797,14 @@ elif menu == "🛍️ 쇼핑 트렌드 분석":
     with col6:
         ages = st.multiselect("연령대 필터 (선택 안 하면 전체)", options=["10", "20", "30", "40", "50", "60"])
 
+    # Initialize session state for shopping trends if they do not exist
+    if "shopping_run" not in st.session_state:
+        st.session_state["shopping_run"] = False
+    if "shopping_df_all" not in st.session_state:
+        st.session_state["shopping_df_all"] = None
+    if "completed_actions" not in st.session_state:
+        st.session_state["completed_actions"] = {}
+
     if st.button("쇼핑 트렌드 분석 실행", type="primary"):
         if not st.session_state["selected_shopping_categories"]:
             st.warning("최소 하나의 쇼핑 카테고리를 비교 목록에 추가해 주세요.")
@@ -822,220 +838,413 @@ elif menu == "🛍️ 쇼핑 트렌드 분석":
                     
                     if not df_list:
                         st.warning("조회된 데이터가 없습니다. 카테고리 또는 기간 설정을 확인해 주세요.")
+                        st.session_state["shopping_df_all"] = None
+                        st.session_state["shopping_run"] = False
                     else:
                         df_all = pd.concat(df_list, ignore_index=True)
-                        
-                        # 탭 인터페이스 구성
-                        tab1, tab2, tab3 = st.tabs(["📈 클릭 트렌드 & 기본 통계", "👥 성별/연령 및 매출액 추이", "🏆 개별 상품 랭킹 보드"])
-                        
-                        with tab1:
-                            # KPI 카드 배치
-                            st.markdown("### 🛍️ 카테고리별 트렌드 지표 요약")
-                            kpi_cols = st.columns(len(df_list))
-                            for i, cat in enumerate(st.session_state["selected_shopping_categories"]):
-                                cat_name = cat["name"]
-                                cat_df = df_all[df_all["category"] == cat_name]
-                                if not cat_df.empty:
-                                    mean_val = cat_df["ratio"].mean()
-                                    max_row = cat_df.loc[cat_df["ratio"].idxmax()]
-                                    colors = ["text-green", "text-blue", "text-purple", "text-green", "text-blue"]
-                                    with kpi_cols[i]:
-                                        make_card(
-                                            f"🛍️ {cat_name} 평균 클릭지표", 
-                                            f"{mean_val:.2f}%", 
-                                            f"최대치: {max_row['ratio']:.2f}% ({max_row['period'].strftime('%Y-%m-%d')})",
-                                            color_class=colors[i % len(colors)]
-                                        )
-                                
-                            # 트렌드 시각화
-                            st.markdown("### 📈 카테고리별 쇼핑 클릭 트렌드 추이 비교")
-                            fig = px.line(
-                                df_all, x="period", y="ratio", color="category",
-                                labels={"period": "날짜", "ratio": "클릭 비율 (%)", "category": "카테고리"},
-                                title="선택한 쇼핑 분야별 상대적 클릭량 추이 (가장 높은 시점 = 100)",
-                                template="plotly_dark"
-                            )
-                            fig.update_layout(
-                                hovermode="x unified",
-                                plot_bgcolor="rgba(0,0,0,0)",
-                                paper_bgcolor="rgba(0,0,0,0)"
-                            )
-                            st.plotly_chart(fig, use_container_width=True)
-                            
-                            # 상세 기술통계 테이블
-                            st.markdown("### 📊 카테고리별 세부 기술통계 및 분석")
-                            stat_df = df_all.groupby("category")["ratio"].describe().reset_index()
-                            
-                            # 왜도, 첨도, 변동계수 계산
-                            stats_extra = df_all.groupby("category")["ratio"].agg(
-                                skew="skew",
-                                kurtosis=lambda x: x.kurtosis(),
-                                cv=lambda x: x.std() / x.mean() if x.mean() != 0 else 0
-                            ).reset_index()
-                            
-                            stat_df = stat_df.merge(stats_extra, on="category")
-                            stat_df.columns = ["카테고리명", "데이터 수", "평균", "표준편차", "최소값", "25%", "중앙값(50%)", "75%", "최대값", "왜도 (Skewness)", "첨도 (Kurtosis)", "변동계수 (CV)"]
-                            
-                            st.dataframe(
-                                stat_df.style.background_gradient(cmap="BuGn", subset=["평균", "최대값"])
-                                .format({"평균": "{:.2f}", "표준편차": "{:.2f}", "왜도 (Skewness)": "{:.2f}", "첨도 (Kurtosis)": "{:.2f}", "변동계수 (CV)": "{:.2f}"}),
-                                use_container_width=True
-                            )
-                            
-                            # CSV 다운로드
-                            csv = df_all.to_csv(index=False).encode('utf-8')
-                            st.download_button(
-                                label="📥 CSV 파일로 쇼핑 트렌드 데이터 다운로드",
-                                data=csv,
-                                file_name=f"naver_shopping_trend_{datetime.now().strftime('%Y%m%d')}.csv",
-                                mime="text/csv"
-                            )
-                            
-                        with tab2:
-                            st.markdown("### 👥 카테고리별 성별 및 연령대 클릭 분포 분석")
-                            
-                            for cat in st.session_state["selected_shopping_categories"]:
-                                cat_name = cat["name"]
-                                cat_id = cat["id"]
-                                
-                                st.markdown(f"#### 🏷️ {cat_name} 인구통계학적 특성")
-                                demo = generate_mock_demographics(cat_name, cat_id)
-                                
-                                col_d1, col_d2 = st.columns(2)
-                                with col_d1:
-                                    # 성별 분포 파이 차트
-                                    df_gender = pd.DataFrame(list(demo["gender"].items()), columns=["성별", "비율"])
-                                    fig_gender = px.pie(
-                                        df_gender, values="비율", names="성별",
-                                        title=f"{cat_name} 성별 관심도 분포",
-                                        color="성별",
-                                        color_discrete_map={"여성": "#ec4899", "남성": "#3b82f6"},
-                                        hole=0.4,
-                                        template="plotly_dark"
-                                    )
-                                    fig_gender.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
-                                    st.plotly_chart(fig_gender, use_container_width=True)
-                                    
-                                with col_d2:
-                                    # 연령대 분포 바 차트
-                                    df_age = pd.DataFrame(list(demo["age"].items()), columns=["연령대", "비율"])
-                                    fig_age = px.bar(
-                                        df_age, x="연령대", y="비율",
-                                        title=f"{cat_name} 연령대별 관심도 분포",
-                                        color="연령대",
-                                        color_discrete_sequence=px.colors.sequential.Sunsetdark,
-                                        template="plotly_dark"
-                                    )
-                                    fig_age.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", showlegend=False)
-                                    st.plotly_chart(fig_age, use_container_width=True)
-                                    
-                            # 매출 추이 시각화
-                            st.markdown("### 💰 카테고리별 일일 추정 매출액 추이")
-                            sales_list = []
-                            for cat in st.session_state["selected_shopping_categories"]:
-                                cat_name = cat["name"]
-                                cat_id = cat["id"]
-                                cat_df = df_all[df_all["category"] == cat_name]
-                                
-                                # 가상의 평균단가 설정
-                                if "패션" in cat_name or "의류" in cat_name:
-                                    avg_price = 55000
-                                elif "디지털" in cat_name or "가전" in cat_name:
-                                    avg_price = 450000
-                                elif "가구" in cat_name or "인테리어" in cat_name or "수납" in cat_name:
-                                    avg_price = 120000
-                                else:
-                                    avg_price = 35000
-                                    
-                                df_sales = generate_mock_sales_trend(cat_df, avg_price)
-                                sales_list.append(df_sales)
-                                
-                            if sales_list:
-                                df_sales_all = pd.concat(sales_list, ignore_index=True)
-                                fig_sales = px.line(
-                                    df_sales_all, x="period", y="추정 매출액", color="category",
-                                    labels={"period": "날짜", "추정 매출액": "추정 매출액 (원)", "category": "카테고리"},
-                                    title="일일 추정 매출액 변동 추이 (요일별 가중치 및 단가 반영)",
-                                    template="plotly_dark"
-                                )
-                                fig_sales.update_layout(
-                                    hovermode="x unified",
-                                    plot_bgcolor="rgba(0,0,0,0)",
-                                    paper_bgcolor="rgba(0,0,0,0)"
-                                )
-                                fig_sales.update_yaxes(tickformat=",d")
-                                st.plotly_chart(fig_sales, use_container_width=True)
-                                
-                        with tab3:
-                            st.markdown("### 🏆 카테고리별 개별 상품 랭킹 보드")
-                            
-                            # 비교 대상 카테고리 중 하나 선택
-                            cat_names = [cat["name"] for cat in st.session_state["selected_shopping_categories"]]
-                            selected_rank_cat_name = st.selectbox("랭킹 보드를 조회할 카테고리를 선택하세요:", cat_names)
-                            
-                            # 선택한 카테고리의 정보 찾기
-                            selected_cat_info = next(c for c in st.session_state["selected_shopping_categories"] if c["name"] == selected_rank_cat_name)
-                            selected_cat_id = selected_cat_info["id"]
-                            
-                            st.markdown(f"#### 🥇 {selected_rank_cat_name} 상품별 실적 순위 (클릭수 및 전환율)")
-                            df_products = generate_mock_products(selected_rank_cat_name, selected_cat_id)
-                            
-                            # 랭킹 정렬 기준 선택
-                            sort_by = st.radio("랭킹 기준 설정", ["추정 매출액 순", "클릭수 순", "구매전환율 순"], horizontal=True)
-                            
-                            if sort_by == "추정 매출액 순":
-                                df_sorted = df_products.sort_values(by="추정 매출액 (원)", ascending=False).reset_index(drop=True)
-                            elif sort_by == "클릭수 순":
-                                df_sorted = df_products.sort_values(by="클릭수", ascending=False).reset_index(drop=True)
-                            else:
-                                df_sorted = df_products.sort_values(by="구매전환율 (%)", ascending=False).reset_index(drop=True)
-                                
-                            df_sorted.index = df_sorted.index + 1
-                            df_sorted.index.name = "순위"
-                            
-                            st.dataframe(
-                                df_sorted.style.background_gradient(cmap="Oranges", subset=["클릭수", "추정 매출액 (원)"])
-                                .format({"구매전환율 (%)": "{:.2f}%", "평균 단가 (원)": "{:,.0f}원", "추정 매출액 (원)": "{:,.0f}원", "클릭수": "{:,.0f}", "추정 구매수": "{:,.0f}"}),
-                                use_container_width=True
-                            )
-                            
-                            # 2차원 산점도를 통한 포트폴리오 분석 (BCG 매트릭스 타입)
-                            st.markdown("#### 📊 상품 포트폴리오 분석 (클릭수 vs 구매전환율)")
-                            st.markdown("""
-                            * **스타 (우측 상단)**: 클릭수(유입량)와 구매전환율(선호도)이 모두 높은 핵심 상품입니다.
-                            * **성장 기회 (좌측 상단)**: 구매전환율은 높으나 유입(클릭수)이 부족해 마케팅 노출 증대가 필요한 상품입니다.
-                            * **노출 과다 (우측 하단)**: 클릭수는 높으나 구매전환율이 낮아 상세페이지나 가격 경쟁력 개선이 필요한 상품입니다.
-                            """)
-                            
-                            fig_scatter = px.scatter(
-                                df_products, x="클릭수", y="구매전환율 (%)",
-                                size="추정 매출액 (원)", color="추정 매출액 (원)",
-                                text="상품명",
-                                color_continuous_scale="Viridis",
-                                title=f"{selected_rank_cat_name} 상품별 마케팅 포지셔닝 맵 (원 크기 = 매출액)",
-                                labels={"클릭수": "클릭수 (유입량)", "구매전환율 (%)": "구매전환율 (%)", "추정 매출액 (원)": "추정 매출액 (원)"},
-                                template="plotly_dark"
-                            )
-                            fig_scatter.update_traces(textposition='top center')
-                            fig_scatter.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
-                            st.plotly_chart(fig_scatter, use_container_width=True)
+                        st.session_state["shopping_df_all"] = df_all
+                        st.session_state["shopping_run"] = True
+                        st.rerun()
                 except Exception as e:
                     err_msg = str(e)
                     st.error(f"🚨 쇼핑 트렌드 데이터를 불러오지 못했습니다: {err_msg}")
-                    if "024" in err_msg or "Authentication failed" in err_msg or "401" in err_msg:
-                        st.markdown("""
-                        <div style="background-color: rgba(239, 68, 68, 0.1); border-left: 4px solid #ef4444; padding: 20px; border-radius: 0 8px 8px 0; margin-top: 15px;">
-                            <h4 style="color: #ef4444; margin-top: 0;">🔑 네이버 API 인증 실패 (오류 코드: 024) 해결 방법</h4>
-                            <p style="font-size: 14px; line-height: 1.6;">네이버 오픈 API 설정 상 <b>데이터랩(쇼핑인사이트)</b> API 서비스가 활성화되지 않았을 때 발생하는 오류입니다. 아래 단계를 통해 즉시 해결할 수 있습니다.</p>
-                            <ol style="font-size: 13.5px; line-height: 1.6; padding-left: 20px;">
-                                <li>네이버 개발자 센터 (<a href="https://developers.naver.com/" target="_blank" style="color: #3b82f6; text-decoration: underline;">Naver Developers</a>)에 로그인합니다.</li>
-                                <li>상단 메뉴의 <b>Application &gt; 내 애플리케이션</b>에서 대시보드에 사용 중인 애플리케이션을 선택합니다.</li>
-                                <li><b>API 설정</b> 탭으로 이동합니다.</li>
-                                <li><b>로그인 오픈 API 서비스 환경 / 비로그인 오픈 API 서비스 권한</b> 목록에서 <b>데이터랩(쇼핑인사이트)</b> 권한이 체크(추가)되어 있는지 확인하고, 추가되지 않았다면 이를 선택하여 <b>저장</b>을 누릅니다.</li>
-                                <li>만약 권한이 제대로 들어가 있음에도 문제가 지속된다면, 사이드바에 입력하신 Client ID와 Client Secret 값이 공백 없이 올바르게 입력되었는지 확인해 주시기 바랍니다.</li>
-                            </ol>
-                        </div>
-                        """, unsafe_allow_html=True)
+                    st.session_state["shopping_df_all"] = None
+                    st.session_state["shopping_run"] = False
+
+    if st.session_state.get("shopping_run", False) and st.session_state.get("shopping_df_all") is not None:
+        df_all = st.session_state["shopping_df_all"]
+        try:
+            # 탭 인터페이스 구성
+            tab1, tab2, tab3 = st.tabs(["📈 클릭 트렌드 & 기본 통계", "👥 성별/연령 및 매출액 추이", "🏆 개별 상품 랭킹 보드"])
+            
+            with tab1:
+                # KPI 카드 배치
+                st.markdown("### 🛍️ 카테고리별 트렌드 지표 요약")
+                kpi_cols = st.columns(len(st.session_state["selected_shopping_categories"]))
+                for i, cat in enumerate(st.session_state["selected_shopping_categories"]):
+                    cat_name = cat["name"]
+                    cat_df = df_all[df_all["category"] == cat_name]
+                    if not cat_df.empty:
+                        mean_val = cat_df["ratio"].mean()
+                        max_row = cat_df.loc[cat_df["ratio"].idxmax()]
+                        colors = ["text-green", "text-blue", "text-purple", "text-green", "text-blue"]
+                        with kpi_cols[i]:
+                            make_card(
+                                f"🛍️ {cat_name} 평균 클릭지표", 
+                                f"{mean_val:.2f}%", 
+                                f"최대치: {max_row['ratio']:.2f}% ({max_row['period'].strftime('%Y-%m-%d')})",
+                                color_class=colors[i % len(colors)]
+                            )
+                    
+                # 트렌드 시각화
+                st.markdown("### 📈 카테고리별 쇼핑 클릭 트렌드 추이 비교")
+                fig = px.line(
+                    df_all, x="period", y="ratio", color="category",
+                    labels={"period": "날짜", "ratio": "클릭 비율 (%)", "category": "카테고리"},
+                    title="선택한 쇼핑 분야별 상대적 클릭량 추이 (가장 높은 시점 = 100)",
+                    template="plotly_dark"
+                )
+                fig.update_layout(
+                    hovermode="x unified",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    paper_bgcolor="rgba(0,0,0,0)"
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # 상세 기술통계 테이블
+                st.markdown("### 📊 카테고리별 세부 기술통계 및 분석")
+                stat_df = df_all.groupby("category")["ratio"].describe().reset_index()
+                
+                # 왜도, 첨도, 변동계수 계산
+                stats_extra = df_all.groupby("category")["ratio"].agg(
+                    skew="skew",
+                    kurtosis=lambda x: x.kurtosis(),
+                    cv=lambda x: x.std() / x.mean() if x.mean() != 0 else 0
+                ).reset_index()
+                
+                stat_df = stat_df.merge(stats_extra, on="category")
+                stat_df.columns = ["카테고리명", "데이터 수", "평균", "표준편차", "최소값", "25%", "중앙값(50%)", "75%", "최대값", "왜도 (Skewness)", "첨도 (Kurtosis)", "변동계수 (CV)"]
+                
+                st.dataframe(
+                    stat_df.style.background_gradient(cmap="BuGn", subset=["평균", "최대값"])
+                    .format({"평균": "{:.2f}", "표준편차": "{:.2f}", "왜도 (Skewness)": "{:.2f}", "첨도 (Kurtosis)": "{:.2f}", "변동계수 (CV)": "{:.2f}"}),
+                    use_container_width=True
+                )
+                
+                # CSV 다운로드
+                csv = df_all.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📥 CSV 파일로 쇼핑 트렌드 데이터 다운로드",
+                    data=csv,
+                    file_name=f"naver_shopping_trend_{datetime.now().strftime('%Y%m%d')}.csv",
+                    mime="text/csv"
+                )
+                
+            with tab2:
+                st.markdown("### 👥 카테고리별 성별 및 연령대 클릭 분포 분석")
+                
+                for cat in st.session_state["selected_shopping_categories"]:
+                    cat_name = cat["name"]
+                    cat_id = cat["id"]
+                    
+                    st.markdown(f"#### 🏷️ {cat_name} 인구통계학적 특성")
+                    demo = generate_mock_demographics(cat_name, cat_id)
+                    
+                    col_d1, col_d2 = st.columns(2)
+                    with col_d1:
+                        # 성별 분포 파이 차트
+                        df_gender = pd.DataFrame(list(demo["gender"].items()), columns=["성별", "비율"])
+                        fig_gender = px.pie(
+                            df_gender, values="비율", names="성별",
+                            title=f"{cat_name} 성별 관심도 분포",
+                            color="성별",
+                            color_discrete_map={"여성": "#ec4899", "남성": "#3b82f6"},
+                            hole=0.4,
+                            template="plotly_dark"
+                        )
+                        fig_gender.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+                        st.plotly_chart(fig_gender, use_container_width=True)
+                        
+                    with col_d2:
+                        # 연령대 분포 바 차트
+                        df_age = pd.DataFrame(list(demo["age"].items()), columns=["연령대", "비율"])
+                        fig_age = px.bar(
+                            df_age, x="연령대", y="비율",
+                            title=f"{cat_name} 연령대별 관심도 분포",
+                            color="연령대",
+                            color_discrete_sequence=px.colors.sequential.Sunsetdark,
+                            template="plotly_dark"
+                        )
+                        fig_age.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", showlegend=False)
+                        st.plotly_chart(fig_age, use_container_width=True)
+                        
+                # 매출 추이 시각화
+                st.markdown("### 💰 카테고리별 일일 추정 매출액 추이")
+                sales_list = []
+                for cat in st.session_state["selected_shopping_categories"]:
+                    cat_name = cat["name"]
+                    cat_id = cat["id"]
+                    cat_df = df_all[df_all["category"] == cat_name]
+                    
+                    # 가상의 평균단가 설정
+                    if "패션" in cat_name or "의류" in cat_name:
+                        avg_price = 55000
+                    elif "디지털" in cat_name or "가전" in cat_name:
+                        avg_price = 450000
+                    elif "가구" in cat_name or "인테리어" in cat_name or "수납" in cat_name:
+                        avg_price = 120000
+                    else:
+                        avg_price = 35000
+                        
+                    df_sales = generate_mock_sales_trend(cat_df, avg_price)
+                    sales_list.append(df_sales)
+                    
+                if sales_list:
+                    df_sales_all = pd.concat(sales_list, ignore_index=True)
+                    fig_sales = px.line(
+                        df_sales_all, x="period", y="추정 매출액", color="category",
+                        labels={"period": "날짜", "추정 매출액": "추정 매출액 (원)", "category": "카테고리"},
+                        title="일일 추정 매출액 변동 추이 (요일별 가중치 및 단가 반영)",
+                        template="plotly_dark"
+                    )
+                    fig_sales.update_layout(
+                        hovermode="x unified",
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        paper_bgcolor="rgba(0,0,0,0)"
+                    )
+                    fig_sales.update_yaxes(tickformat=",d")
+                    st.plotly_chart(fig_sales, use_container_width=True)
+                    
+            with tab3:
+                st.markdown("### 🏆 카테고리별 개별 상품 랭킹 보드")
+                
+                # 비교 대상 카테고리 중 하나 선택
+                cat_names = [cat["name"] for cat in st.session_state["selected_shopping_categories"]]
+                selected_rank_cat_name = st.selectbox("랭킹 보드를 조회할 카테고리를 선택하세요:", cat_names, key="rank_cat_select")
+                
+                # 선택한 카테고리의 정보 찾기
+                selected_cat_info = next(c for c in st.session_state["selected_shopping_categories"] if c["name"] == selected_rank_cat_name)
+                selected_cat_id = selected_cat_info["id"]
+                
+                # 상품 데이터 로드 (시뮬레이션 데이터)
+                df_products = generate_mock_products(selected_rank_cat_name, selected_cat_id)
+                
+                # 1. 포지셔닝 진단 연산 (상위/하위 백분위 및 평균 비교)
+                q85_clicks = df_products["클릭수"].quantile(0.85)
+                q80_clicks = df_products["클릭수"].quantile(0.80)
+                q30_cvr = df_products["구매전환율 (%)"].quantile(0.30)
+                avg_cvr = df_products["구매전환율 (%)"].mean()
+                median_clicks = df_products["클릭수"].median()
+                median_cvr = df_products["구매전환율 (%)"].median()
+                
+                def get_positioning(row):
+                    clicks = row["클릭수"]
+                    cvr = row["구매전환율 (%)"]
+                    if clicks >= q85_clicks and cvr < avg_cvr:
+                        return "노출 과다"
+                    elif clicks >= q80_clicks and cvr < q30_cvr:
+                        return "개선 필요"
+                    elif clicks >= median_clicks and cvr >= median_cvr:
+                        return "스타"
+                    elif clicks < median_clicks and cvr >= median_cvr:
+                        return "성장 기회"
+                    else:
+                        return "유지 관리"
+                
+                df_products["포지셔닝"] = df_products.apply(get_positioning, axis=1)
+                
+                over_exposed_count = int((df_products["포지셔닝"] == "노출 과다").sum())
+                underperforming_count = int((df_products["포지셔닝"] == "개선 필요").sum())
+                star_growth_count = int(((df_products["포지셔닝"] == "스타") | (df_products["포지셔닝"] == "성장 기회")).sum())
+                
+                # 액션 플랜 정의 및 상태 트래킹
+                action_items = [
+                    f"[{selected_rank_cat_name}] 노출 과다 상품 상세 페이지 이미지 고도화 및 후기 상단 배치",
+                    f"[{selected_rank_cat_name}] 개선 필요 상품 가격 할인 프로모션 또는 쿠폰 발행",
+                    f"[{selected_rank_cat_name}] 스타 상품 광고 입찰가 상향 및 노출 지면 확대",
+                    f"[{selected_rank_cat_name}] 성장 기회 상품 SNS 체험단 모집 및 인플루언서 협찬 진행",
+                    f"[{selected_rank_cat_name}] 경쟁사 가격 동향 분석 및 스마트스토어 즉시 할인 설정"
+                ]
+                
+                checked_count = sum(1 for item in action_items if st.session_state["completed_actions"].get(item, False))
+                total_count = len(action_items)
+                pending_count = total_count - checked_count
+                completion_rate = (checked_count / total_count) * 100
+                
+                # 독립된 상단 메트릭스 카드 배치
+                col_score1, col_score2, col_score3, col_score4 = st.columns(4)
+                with col_score1:
+                    make_card("🚨 노출 과다 상품 수", f"{over_exposed_count}개", "클릭수 상위 15% & CVR 평균 미만", "text-red")
+                with col_score2:
+                    make_card("⚠️ 개선 필요 상품 수", f"{underperforming_count}개", "클릭수 상위 20% & CVR 하위 30%", "text-orange")
+                with col_score3:
+                    make_card("📋 주간 보류 액션", f"{pending_count}개", f"진행률: {completion_rate:.0f}% ({checked_count}/{total_count})", "text-blue")
+                with col_score4:
+                    make_card("🏆 스타 & 성장 상품 수", f"{star_growth_count}개", "성장성 양호 및 핵심 주력 상품", "text-green")
+                
+                st.markdown("---")
+                
+                # 반도넛 게이지 차트 & 액션 플랜 체크리스트 배치
+                col_gauge, col_checklist = st.columns([2, 3])
+                
+                with col_gauge:
+                    st.markdown("#### 📈 액션 플랜 달성률")
+                    fig_gauge = go.Figure(data=[go.Pie(
+                        values=[completion_rate, 100 - completion_rate, 100],
+                        labels=["완료", "미완료", "hidden"],
+                        hole=0.7,
+                        marker=dict(colors=["#10b981", "#374151", "rgba(0,0,0,0)"]),
+                        hoverinfo="label+value" if completion_rate > 0 else "none",
+                        textinfo="none",
+                        sort=False,
+                        rotation=270
+                    )])
+                    fig_gauge.update_layout(
+                        showlegend=False,
+                        margin=dict(t=10, b=10, l=10, r=10),
+                        height=240,
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        annotations=[
+                            dict(
+                                text=f"<span style='font-size:26px; font-weight:bold; color:#10b981;'>{completion_rate:.0f}%</span><br><span style='font-size:12px; color:#9ca3af;'>달성률</span>",
+                                x=0.5, y=0.55,
+                                showarrow=False,
+                                align="center"
+                            )
+                        ]
+                    )
+                    st.plotly_chart(fig_gauge, use_container_width=True)
+                    
+                with col_checklist:
+                    st.markdown("#### 🎯 주간 마케팅 권장 액션 플랜")
+                    for idx, item in enumerate(action_items):
+                        is_checked = st.checkbox(
+                            item,
+                            value=st.session_state["completed_actions"].get(item, False),
+                            key=f"chk_{selected_cat_id}_{idx}"
+                        )
+                        if is_checked != st.session_state["completed_actions"].get(item, False):
+                            st.session_state["completed_actions"][item] = is_checked
+                            st.rerun()
+                            
+                st.markdown("---")
+                
+                st.markdown(f"#### 🥇 {selected_rank_cat_name} 상품별 실적 및 진단 순위")
+                
+                # 랭킹 정렬 기준 선택
+                sort_by = st.radio("랭킹 기준 설정", ["추정 매출액 순", "클릭수 순", "구매전환율 순"], horizontal=True, key="rank_sort_by")
+                
+                if sort_by == "추정 매출액 순":
+                    df_sorted = df_products.sort_values(by="추정 매출액 (원)", ascending=False).reset_index(drop=True)
+                elif sort_by == "클릭수 순":
+                    df_sorted = df_products.sort_values(by="클릭수", ascending=False).reset_index(drop=True)
+                else:
+                    df_sorted = df_products.sort_values(by="구매전환율 (%)", ascending=False).reset_index(drop=True)
+                    
+                df_sorted.index = df_sorted.index + 1
+                df_sorted.index.name = "순위"
+                
+                # 테이블 컬럼 순서 재배치 및 출력
+                df_display_sorted = df_sorted[["상품명", "포지셔닝", "클릭수", "구매전환율 (%)", "추정 구매수", "평균 단가 (원)", "추정 매출액 (원)"]]
+                st.dataframe(
+                    df_display_sorted.style.background_gradient(cmap="Oranges", subset=["클릭수", "추정 매출액 (원)"])
+                    .format({"구매전환율 (%)": "{:.2f}%", "평균 단가 (원)": "{:,.0f}원", "추정 매출액 (원)": "{:,.0f}원", "클릭수": "{:,.0f}", "추정 구매수": "{:,.0f}"}),
+                    use_container_width=True
+                )
+                
+                # 시각화 차트 배치 (가로 배치)
+                col_bar, col_scatter = st.columns(2)
+                
+                with col_bar:
+                    df_sorted_for_bar = df_products.copy().sort_values(by="클릭수", ascending=False)
+                    fig_bar = px.bar(
+                        df_sorted_for_bar, x="상품명", y="클릭수", color="포지셔닝",
+                        color_discrete_map={
+                            "개선 필요": "#ef4444",
+                            "노출 과다": "#f97316",
+                            "스타": "#10b981",
+                            "성장 기회": "#3b82f6",
+                            "유지 관리": "#6b7280"
+                        },
+                        category_orders={"포지셔닝": ["스타", "성장 기회", "노출 과다", "개선 필요", "유지 관리"]},
+                        title=f"📊 {selected_rank_cat_name} 상품별 유입(클릭수) 및 포지셔닝 비교",
+                        labels={"클릭수": "클릭수 (회)", "상품명": "상품명", "포지셔닝": "상태 포지셔닝"},
+                        template="plotly_dark"
+                    )
+                    fig_bar.update_layout(
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        xaxis_tickangle=-45
+                    )
+                    fig_bar.update_traces(marker_cornerradius=12)
+                    st.plotly_chart(fig_bar, use_container_width=True)
+                    
+                with col_scatter:
+                    fig_scatter = px.scatter(
+                        df_products, x="클릭수", y="구매전환율 (%)",
+                        size="추정 매출액 (원)", color="포지셔닝",
+                        color_discrete_map={
+                            "개선 필요": "#ef4444",
+                            "노출 과다": "#f97316",
+                            "스타": "#10b981",
+                            "성장 기회": "#3b82f6",
+                            "유지 관리": "#6b7280"
+                        },
+                        text="상품명",
+                        title=f"🎯 {selected_rank_cat_name} 상품별 마케팅 포지셔닝 맵 (원 크기 = 매출액)",
+                        labels={"클릭수": "클릭수 (유입량)", "구매전환율 (%)": "구매전환율 (%)", "포지셔닝": "포지셔닝"},
+                        template="plotly_dark"
+                    )
+                    fig_scatter.update_traces(textposition='top center')
+                    fig_scatter.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+                    st.plotly_chart(fig_scatter, use_container_width=True)
+                    
+                # 보고서 내보내기 다운로드 버튼
+                st.markdown("### 📥 맞춤형 종합 진단 보고서 내보내기")
+                
+                report_md = f"""# 🛍️ 네이버 쇼핑 트렌드 상품 진단 보고서
+
+- **진단 대상 카테고리**: {selected_rank_cat_name} (ID: {selected_cat_id})
+- **진단 기준 일자**: {datetime.now().strftime('%Y-%m-%d')}
+- **총 분석 상품 수**: {len(df_products)}개
+
+## 📊 상품 포지셔닝 현황
+- 🏆 **스타 상품**: {', '.join(df_products[df_products['포지셔닝'] == '스타']['상품명'].tolist()) or '없음'}
+- 📈 **성장 기회 상품**: {', '.join(df_products[df_products['포지셔닝'] == '성장 기회']['상품명'].tolist()) or '없음'}
+- 🚨 **노출 과다 상품 (개선 필요)**: {', '.join(df_products[df_products['포지셔닝'] == '노출 과다']['상품명'].tolist()) or '없음'}
+- ⚠️ **개선 필요 상품 (전환율 저조)**: {', '.join(df_products[df_products['포지셔닝'] == '개선 필요']['상품명'].tolist()) or '없음'}
+- ⚙️ **유지 관리 상품**: {', '.join(df_products[df_products['포지셔닝'] == '유지 관리']['상품명'].tolist()) or '없음'}
+
+## 🔍 상품별 세일즈/마케팅 지표
+| 순위 | 상품명 | 포지셔닝 | 클릭수 | 구매전환율 (%) | 추정 매출액 (원) |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+"""
+                for i, row in df_display_sorted.iterrows():
+                    report_md += f"| {i} | {row['상품명']} | {row['포지셔닝']} | {row['클릭수']:,} | {row['구매전환율 (%)']:.2f}% | {row['추정 매출액 (원)']:,}원 |\n"
+                    
+                report_md += f"""
+## 💡 맞춤형 마케팅 추천 액션
+1. **노출 과다 상품 ({over_exposed_count}개)**
+   - 상세페이지 이미지 고도화 및 고객 후기(리뷰)를 상단에 노출시켜 CVR을 개선해야 합니다.
+   - 경쟁사 상품 대비 가격 경쟁력이 떨어질 수 있으므로, 즉시 할인 또는 쿠폰 혜택 적용을 권장합니다.
+
+2. **개선 필요 상품 ({underperforming_count}개)**
+   - 클릭수 대비 구매전환율이 매우 낮으므로 상품 매력도를 대폭 보완해야 합니다.
+   - 가격 할인 프로모션을 실행하거나 1+1 구성 등 기획전을 연동하세요.
+
+3. **스타 상품**
+   - 검색 광고 및 쇼핑 검색 입찰가를 추가로 상향 조정하여 검색 노출 순위를 상위로 고정하십시오.
+   - 외부 마케팅(SNS, 인플루언서 협찬)을 병행하여 유입 극대화를 추진합니다.
+
+4. **성장 기회 상품**
+   - 전환율은 매우 훌륭하므로 유입량(클릭수)만 늘려주면 매출이 급성장합니다.
+   - 쇼핑 키워드 광고 집행을 적극 검토하십시오.
+"""
+                st.download_button(
+                    label="📥 종합 진단 보고서 다운로드 (.md)",
+                    data=report_md,
+                    file_name=f"shopping_trend_report_{selected_rank_cat_name}_{datetime.now().strftime('%Y%m%d')}.md",
+                    mime="text/markdown",
+                    use_container_width=True
+                )
+        except Exception as e:
+            err_msg = str(e)
+            st.error(f"🚨 쇼핑 트렌드 데이터를 불러오지 못했습니다: {err_msg}")
+            if "024" in err_msg or "Authentication failed" in err_msg or "401" in err_msg:
+                st.markdown("""
+                <div style="background-color: rgba(239, 68, 68, 0.1); border-left: 4px solid #ef4444; padding: 20px; border-radius: 0 8px 8px 0; margin-top: 15px;">
+                    <h4 style="color: #ef4444; margin-top: 0;">🔑 네이버 API 인증 실패 (오류 코드: 024) 해결 방법</h4>
+                    <p style="font-size: 14px; line-height: 1.6;">네이버 오픈 API 설정 상 <b>데이터랩(쇼핑인사이트)</b> API 서비스가 활성화되지 않았을 때 발생하는 오류입니다. 아래 단계를 통해 즉시 해결할 수 있습니다.</p>
+                    <ol style="font-size: 13.5px; line-height: 1.6; padding-left: 20px;">
+                        <li>네이버 개발자 센터 (<a href="https://developers.naver.com/" target="_blank" style="color: #3b82f6; text-decoration: underline;">Naver Developers</a>)에 로그인합니다.</li>
+                        <li>상단 메뉴의 <b>Application &gt; 내 애플리케이션</b>에서 대시보드에 사용 중인 애플리케이션을 선택합니다.</li>
+                        <li><b>API 설정</b> 탭으로 이동합니다.</li>
+                        <li><b>로그인 오픈 API 서비스 환경 / 비로그인 오픈 API 서비스 권한</b> 목록에서 <b>데이터랩(쇼핑인사이트)</b> 권한이 체크(추가)되어 있는지 확인하고, 추가되지 않았다면 이를 선택하여 <b>저장</b>을 누릅니다.</li>
+                        <li>만약 권한이 제대로 들어가 있음에도 문제가 지속된다면, 사이드바에 입력하신 Client ID와 Client Secret 값이 공백 없이 올바르게 입력되었는지 확인해 주시기 바랍니다.</li>
+                    </ol>
+                </div>
+                """, unsafe_allow_html=True)
 
 else:
     # 블로그, 카페, 뉴스, 쇼핑 검색을 위한 검색 조건 템플릿
