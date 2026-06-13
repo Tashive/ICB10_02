@@ -2501,7 +2501,7 @@ with col_main:
                         fig_brand = px.bar(
                             brand_counts, x="상품수", y="brand", color="keyword", barmode="group",
                             title="검색어별 상위 브랜드 상품 분포",
-                            template="plotly_dark",
+                            template="plotly_white",
                             orientation="h"
                         )
                         fig_brand.update_layout(
