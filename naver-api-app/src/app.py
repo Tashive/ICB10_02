@@ -799,6 +799,39 @@ elif menu == "🛍️ 쇼핑 트렌드 분석":
     if st.button("쇼핑 트렌드 분석 실행", type="primary"):
         if not st.session_state["selected_shopping_categories"]:
             st.warning("최소 하나의 쇼핑 카테고리를 비교 목록에 추가해 주세요.")
+        else:
+            with st.spinner("네이버 쇼핑인사이트 데이터 조회 중..."):
+                try:
+                    df_list = []
+                    ages_mapped = []
+                    ages_map = {"10": "2", "20": "3", "30": "5", "40": "7", "50": "9", "60": "11"}
+                    for a in ages:
+                        if a in ages_map:
+                            ages_mapped.append(ages_map[a])
+                            
+                    for cat in st.session_state["selected_shopping_categories"]:
+                        cat_name = cat["name"]
+                        cat_id = cat["id"]
+                        data = cached_shopping_insight(
+                            client_id, client_secret, cat_id, cat_name,
+                            start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d"),
+                            time_unit, device, gender, ages_mapped
+                        )
+                        
+                        results = data.get("results", [])
+                        if results and results[0].get("data"):
+                            g_data = results[0].get("data", [])
+                            df = pd.DataFrame(g_data)
+                            df["ratio"] = df["ratio"].astype(float)
+                            df["period"] = pd.to_datetime(df["period"])
+                            df["category"] = cat_name
+                            df_list.append(df)
+                    
+                    if not df_list:
+                        st.warning("조회된 데이터가 없습니다. 카테고리 또는 기간 설정을 확인해 주세요.")
+                    else:
+                        df_all = pd.concat(df_list, ignore_index=True)
+                        
                         # 스마트스토어 파일 업로드 확인 및 파싱
                         store_df = None
                         if uploaded_file is not None:
@@ -818,6 +851,72 @@ elif menu == "🛍️ 쇼핑 트렌드 분석":
                                 st.error(f"❌ 스마트스토어 데이터 파싱 실패: {str(e)}")
                                 store_df = None
                         
+                        # 탭 인터페이스 구성
+                        tab1, tab2, tab3 = st.tabs(["📈 클릭 트렌드 & 기본 통계", "👥 성별/연령 및 매출액 추이", "🏆 개별 상품 랭킹 보드"])
+                        
+                        with tab1:
+                            # KPI 카드 배치
+                            st.markdown("### 🛍️ 카테고리별 트렌드 지표 요약")
+                            kpi_cols = st.columns(len(df_list))
+                            for i, cat in enumerate(st.session_state["selected_shopping_categories"]):
+                                cat_name = cat["name"]
+                                cat_df = df_all[df_all["category"] == cat_name]
+                                if not cat_df.empty:
+                                    mean_val = cat_df["ratio"].mean()
+                                    max_row = cat_df.loc[cat_df["ratio"].idxmax()]
+                                    colors = ["text-green", "text-blue", "text-purple", "text-green", "text-blue"]
+                                    with kpi_cols[i]:
+                                        make_card(
+                                            f"🛍️ {cat_name} 평균 클릭지표", 
+                                            f"{mean_val:.2f}%", 
+                                            f"최대치: {max_row['ratio']:.2f}% ({max_row['period'].strftime('%Y-%m-%d')})",
+                                            color_class=colors[i % len(colors)]
+                                        )
+                                
+                            # 트렌드 시각화
+                            st.markdown("### 📈 카테고리별 쇼핑 클릭 트렌드 추이 비교")
+                            fig = px.line(
+                                df_all, x="period", y="ratio", color="category",
+                                labels={"period": "날짜", "ratio": "클릭 비율 (%)", "category": "카테고리"},
+                                title="선택한 쇼핑 분야별 상대적 클릭량 추이 (가장 높은 시점 = 100)",
+                                template="plotly_dark"
+                            )
+                            fig.update_layout(
+                                hovermode="x unified",
+                                plot_bgcolor="rgba(0,0,0,0)",
+                                paper_bgcolor="rgba(0,0,0,0)"
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+                            
+                            # 상세 기술통계 테이블
+                            st.markdown("### 📊 카테고리별 세부 기술통계 및 분석")
+                            stat_df = df_all.groupby("category")["ratio"].describe().reset_index()
+                            
+                            # 왜도, 첨도, 변동계수 계산
+                            stats_extra = df_all.groupby("category")["ratio"].agg(
+                                skew="skew",
+                                kurtosis=lambda x: x.kurtosis(),
+                                cv=lambda x: x.std() / x.mean() if x.mean() != 0 else 0
+                            ).reset_index()
+                            
+                            stat_df = stat_df.merge(stats_extra, on="category")
+                            stat_df.columns = ["카테고리명", "데이터 수", "평균", "표준편차", "최소값", "25%", "중앙값(50%)", "75%", "최대값", "왜도 (Skewness)", "첨도 (Kurtosis)", "변동계수 (CV)"]
+                            
+                            st.dataframe(
+                                stat_df.style.background_gradient(cmap="BuGn", subset=["평균", "최대값"])
+                                .format({"평균": "{:.2f}", "표준편차": "{:.2f}", "왜도 (Skewness)": "{:.2f}", "첨도 (Kurtosis)": "{:.2f}", "변동계수 (CV)": "{:.2f}"}),
+                                use_container_width=True
+                            )
+                            
+                            # CSV 다운로드
+                            csv = df_all.to_csv(index=False).encode('utf-8')
+                            st.download_button(
+                                label="📥 CSV 파일로 쇼핑 트렌드 데이터 다운로드",
+                                data=csv,
+                                file_name=f"naver_shopping_trend_{datetime.now().strftime('%Y%m%d')}.csv",
+                                mime="text/csv"
+                            )
+                            
                         with tab2:
                             st.markdown("### 👥 카테고리별 성별 및 연령대 클릭 분포 분석")
                             
@@ -864,25 +963,37 @@ elif menu == "🛍️ 쇼핑 트렌드 분석":
                                 cat_id = cat["id"]
                                 cat_df = df_all[df_all["category"] == cat_name]
                                 
-                                # 가상의 평균단가 설정
-                                if "패션" in cat_name or "의류" in cat_name:
-                                    avg_price = 55000
-                                elif "디지털" in cat_name or "가전" in cat_name:
-                                    avg_price = 450000
-                                elif "가구" in cat_name or "인테리어" in cat_name or "수납" in cat_name:
-                                    avg_price = 120000
-                                else:
-                                    avg_price = 35000
+                                # 스마트스토어 업로드 시 실제 데이터와 네이버 트렌드 지수 융합 배분
+                                if store_df is not None:
+                                    mapped_products = store_df[store_df["매핑 카테고리"] == cat_name]
+                                    total_revenue = mapped_products["매출액"].sum()
                                     
-                                df_sales = generate_mock_sales_trend(cat_df, avg_price)
-                                sales_list.append(df_sales)
+                                    if total_revenue > 0:
+                                        total_ratio = cat_df["ratio"].sum()
+                                        df_sales = cat_df.copy()
+                                        if total_ratio > 0:
+                                            # 트렌드 지수에 비례하여 누적 결제금액을 일일 매출로 안분 배분
+                                            df_sales["추정 매출액"] = ((df_sales["ratio"] / total_ratio) * total_revenue).astype(int)
+                                        else:
+                                            df_sales["추정 매출액"] = 0
+                                        sales_list.append(df_sales[["period", "추정 매출액", "category"]])
+                                    else:
+                                        # 매핑 상품은 없으나 카테고리 기본 추이 렌더링
+                                        avg_price = 120000 if "가구" in cat_name or "수납" in cat_name else (450000 if "디지털" in cat_name else 55000)
+                                        df_sales = generate_mock_sales_trend(cat_df, avg_price)
+                                        sales_list.append(df_sales)
+                                else:
+                                    # 가상 데이터 렌더링
+                                    avg_price = 120000 if "가구" in cat_name or "수납" in cat_name else (450000 if "디지털" in cat_name else 55000)
+                                    df_sales = generate_mock_sales_trend(cat_df, avg_price)
+                                    sales_list.append(df_sales)
                                 
                             if sales_list:
                                 df_sales_all = pd.concat(sales_list, ignore_index=True)
                                 fig_sales = px.line(
                                     df_sales_all, x="period", y="추정 매출액", color="category",
                                     labels={"period": "날짜", "추정 매출액": "추정 매출액 (원)", "category": "카테고리"},
-                                    title="일일 추정 매출액 변동 추이 (요일별 가중치 및 단가 반영)",
+                                    title="일일 매출액 변동 추이 (요일별 가중치 또는 안분 배분 반영)",
                                     template="plotly_dark"
                                 )
                                 fig_sales.update_layout(
@@ -898,17 +1009,70 @@ elif menu == "🛍️ 쇼핑 트렌드 분석":
                             
                             # 비교 대상 카테고리 중 하나 선택
                             cat_names = [cat["name"] for cat in st.session_state["selected_shopping_categories"]]
-                            selected_rank_cat_name = st.selectbox("랭킹 보드를 조회할 카테고리를 선택하세요:", cat_names)
+                            selected_rank_cat_name = st.selectbox("랭킹 보드를 조회할 카테고리를 선택하세요:", cat_names, key="rank_cat_selector")
                             
-                            # 선택한 카테고리의 정보 찾기
                             selected_cat_info = next(c for c in st.session_state["selected_shopping_categories"] if c["name"] == selected_rank_cat_name)
                             selected_cat_id = selected_cat_info["id"]
                             
+                            # 스마트스토어 업로드 시 카테고리 매핑 관리 아코디언 제공
+                            if store_df is not None:
+                                with st.expander("🔗 스마트스토어 상품 - 네이버 쇼핑 카테고리 매핑 관리"):
+                                    st.markdown("스마트스토어 상품명 분석을 통해 자동으로 소속 카테고리가 분류되었습니다. 오분류가 있는 경우 아래에서 카테고리를 수정해 주세요.")
+                                    cat_options = ["미분류"] + [c["name"] for c in st.session_state["selected_shopping_categories"]]
+                                    
+                                    if "manual_mappings" not in st.session_state:
+                                        st.session_state["manual_mappings"] = {}
+                                        
+                                    for idx, row in store_df.iterrows():
+                                        p_id = row["상품ID"]
+                                        p_name = row["상품명"]
+                                        auto_cat = row["매핑 카테고리"]
+                                        
+                                        current_cat = st.session_state["manual_mappings"].get(p_id, auto_cat)
+                                        
+                                        col_p1, col_p2 = st.columns([3, 1])
+                                        with col_p1:
+                                            st.markdown(f"📦 **{p_name}** `(ID: {p_id})`")
+                                        with col_p2:
+                                            new_cat = st.selectbox(
+                                                "소속 카테고리", 
+                                                options=cat_options, 
+                                                index=cat_options.index(current_cat) if current_cat in cat_options else 0,
+                                                key=f"map_{p_id}"
+                                            )
+                                            if new_cat != current_cat:
+                                                st.session_state["manual_mappings"][p_id] = new_cat
+                                                st.rerun()
+                                                
+                                    for idx, row in store_df.iterrows():
+                                        p_id = row["상품ID"]
+                                        if p_id in st.session_state["manual_mappings"]:
+                                            store_df.at[idx, "매핑 카테고리"] = st.session_state["manual_mappings"][p_id]
+
+                            # 매핑된 상품이 있을 경우 실제 데이터 사용, 없을 경우 가상 데이터 시뮬레이션
+                            actual_products_in_cat = pd.DataFrame()
+                            if store_df is not None:
+                                actual_products_in_cat = store_df[store_df["매핑 카테고리"] == selected_rank_cat_name]
+                                
+                            if not actual_products_in_cat.empty:
+                                st.success(f"✅ 스마트스토어의 실제 등록 상품 {len(actual_products_in_cat)}개의 실적을 기반으로 랭킹 보드를 렌더링했습니다.")
+                                df_products = actual_products_in_cat[[
+                                    "상품명", "클릭수", "구매전환율", "구매수", "평균 단가 (원)", "매출액"
+                                ]].rename(columns={
+                                    "구매전환율": "구매전환율 (%)", 
+                                    "구매수": "추정 구매수", 
+                                    "평균 단가 (원)": "평균 단가 (원)",
+                                    "매출액": "추정 매출액 (원)"
+                                })
+                            else:
+                                if store_df is not None:
+                                    st.info(f"💡 현재 카테고리('{selected_rank_cat_name}')에 매핑된 실제 스마트스토어 상품이 없어 가상 시뮬레이션 데이터를 제공합니다. 위 매핑 관리 아코디언에서 상품을 매핑하시면 반영됩니다.")
+                                df_products = generate_mock_products(selected_rank_cat_name, selected_cat_id)
+                            
                             st.markdown(f"#### 🥇 {selected_rank_cat_name} 상품별 실적 순위 (클릭수 및 전환율)")
-                            df_products = generate_mock_products(selected_rank_cat_name, selected_cat_id)
                             
                             # 랭킹 정렬 기준 선택
-                            sort_by = st.radio("랭킹 기준 설정", ["추정 매출액 순", "클릭수 순", "구매전환율 순"], horizontal=True)
+                            sort_by = st.radio("랭킹 기준 설정", ["추정 매출액 순", "클릭수 순", "구매전환율 순"], horizontal=True, key="rank_sort_criteria")
                             
                             if sort_by == "추정 매출액 순":
                                 df_sorted = df_products.sort_values(by="추정 매출액 (원)", ascending=False).reset_index(drop=True)
