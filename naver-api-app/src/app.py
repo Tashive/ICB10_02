@@ -3,6 +3,8 @@
 본 대시보드는 네이버 검색어 트렌드, 쇼핑 트렌드, 쇼핑 검색, 블로그 검색, 카페글 검색, 뉴스 검색 서비스를 제공합니다.
 """
 
+import os
+
 import streamlit as st
 import pandas as pd
 import numpy as np
