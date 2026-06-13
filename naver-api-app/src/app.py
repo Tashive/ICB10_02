@@ -312,50 +312,30 @@ def make_card(title, value, subtitle="", color_class=""):
     st.markdown(f"""
     <div class="metric-card">
         <div style="color: #94a3b8; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">{title}</div>
-        <div style="font-size: 26pxmenu_all = [
-    "🏠 대시보드 소개",
-    "📈 검색어 트렌드 분석",
-    "🛍️ 쇼핑 트렌드 분석",
-    "📦 내 쇼핑몰 상품 진단",
-    "🛒 쇼핑 검색 분석",
-    "📝 블로그 검색 분석",
-    "👥 카페글 검색 분석",
-    "📰 뉴스 검색 분석",
-]
+        <div style="font-size: 26px; font-weight: 800; margin-top: 8px;" class="{color_class}">{value}</div>
+        {f'<div style="color: #64748b; font-size: 11px; margin-top: 6px;">{subtitle}</div>' if subtitle else ''}
+    </div>
+    """, unsafe_allow_html=True)
 
-# 세션 상태에서 현재 선택된 메뉴 가져오기
-if "current_menu" not in st.session_state:
-    st.session_state["current_menu"] = "🏠 대시보드 소개"
+# 3. 사이드바 - 네비게이션 메뉴 (상단) + API 설정 (하단)
 
-def set_menu(selected):
-    """메뉴 선택 콜백 함수"""
-    st.session_state["current_menu"] = selected
+# API 키 로드 (환경변수 → Streamlit Secrets → 세션 상태 순)
+env_client_id = os.getenv("NAVER_CLIENT_ID", "")
+env_client_secret = os.getenv("NAVER_CLIENT_SECRET", "")
 
-# 안내 섹션
-for item in ["🏠 대시보드 소개"]:
-    is_active = st.session_state["current_menu"] == item
-    btn_style = "primary" if is_active else "secondary"
-    if st.sidebar.button(item, key=f"menu_{item}", use_container_width=True, type=btn_style):
-        set_menu(item)
-        st.rerun()
+secrets_client_id = env_client_id
+secrets_client_secret = env_client_secret
 
-# 데이터랩 트렌드 분석 섹션
-st.sidebar.markdown('<div class="sidebar-section-header">데이터랩 트렌드 분석</div>', unsafe_allow_html=True)
-for item in ["📈 검색어 트렌드 분석", "🛍️ 쇼핑 트렌드 분석"]:
-    is_active = st.session_state["current_menu"] == item
-    btn_style = "primary" if is_active else "secondary"
-    if st.sidebar.button(item, key=f"menu_{item}", use_container_width=True, type=btn_style):
-        set_menu(item)
-        st.rerun()
+if not secrets_client_id or not secrets_client_secret:
+    try:
+        secrets_client_id = st.secrets.get("NAVER_CLIENT_ID", "")
+        secrets_client_secret = st.secrets.get("NAVER_CLIENT_SECRET", "")
+    except Exception:
+        secrets_client_id = ""
+        secrets_client_secret = ""
 
-# 쇼핑몰 매출 실적 분석 섹션
-st.sidebar.markdown('<div class="sidebar-section-header">쇼핑몰 매출 실적 분석</div>', unsafe_allow_html=True)
-for item in ["📦 내 쇼핑몰 상품 진단"]:
-    is_active = st.session_state["current_menu"] == item
-    btn_style = "primary" if is_active else "secondary"
-    if st.sidebar.button(item, key=f"menu_{item}", use_container_width=True, type=btn_style):
-        set_menu(item)
-        st.rerun()cret", "")
+default_client_id = secrets_client_id if secrets_client_id else st.session_state.get("client_id", "")
+default_client_secret = secrets_client_secret if secrets_client_secret else st.session_state.get("client_secret", "")
 
 # 사이드바 스타일 추가
 st.sidebar.markdown("""
