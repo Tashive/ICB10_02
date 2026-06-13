@@ -5,6 +5,12 @@
 
 import os
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv(override=True)
+except ImportError:
+    pass
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -131,19 +137,29 @@ def make_card(title, value, subtitle="", color_class=""):
 # 3. 사이드바 - API 인증 정보 및 글로벌 설정
 st.sidebar.markdown("### 🔑 Naver API Credentials")
 
-# st.secrets 또는 st.session_state에서 API key 로드 시도
-try:
-    secrets_client_id = st.secrets.get("NAVER_CLIENT_ID", "")
-    secrets_client_secret = st.secrets.get("NAVER_CLIENT_SECRET", "")
-except Exception:
-    secrets_client_id = ""
-    secrets_client_secret = ""
+# 1순위: 로컬 환경 변수 (.env)
+env_client_id = os.getenv("NAVER_CLIENT_ID", "")
+env_client_secret = os.getenv("NAVER_CLIENT_SECRET", "")
 
+# 2순위: Streamlit Secrets
+secrets_client_id = env_client_id
+secrets_client_secret = env_client_secret
+
+if not secrets_client_id or not secrets_client_secret:
+    try:
+        secrets_client_id = st.secrets.get("NAVER_CLIENT_ID", "")
+        secrets_client_secret = st.secrets.get("NAVER_CLIENT_SECRET", "")
+    except Exception:
+        secrets_client_id = ""
+        secrets_client_secret = ""
+
+# 3순위: 세션 상태 (수동 입력 보류용) 또는 빈 값
 default_client_id = secrets_client_id if secrets_client_id else st.session_state.get("client_id", "")
 default_client_secret = secrets_client_secret if secrets_client_secret else st.session_state.get("client_secret", "")
 
-client_id_input = st.sidebar.text_input("Naver Client ID", value=default_client_id, type="password", help="네이버 개발자 센터에서 발급받은 Client ID를 입력하세요. Streamlit Cloud 배포 시 Secrets에 등록하면 자동으로 채워집니다.")
-client_secret_input = st.sidebar.text_input("Naver Client Secret", value=default_client_secret, type="password", help="네이버 개발자 센터에서 발급받은 Client Secret을 입력하세요. Streamlit Cloud 배포 시 Secrets에 등록하면 자동으로 채워집니다.")
+# 사이드바 입력 폼 (이것을 통해 사용자가 직접 수동 입력 가능)
+client_id_input = st.sidebar.text_input("Naver Client ID", value=default_client_id, type="password", help="네이버 개발자 센터에서 발급받은 Client ID를 입력하세요. Streamlit 설정 또는 .env 파일에 등록하면 자동으로 채워집니다.")
+client_secret_input = st.sidebar.text_input("Naver Client Secret", value=default_client_secret, type="password", help="네이버 개발자 센터에서 발급받은 Client Secret을 입력하세요. Streamlit 설정 또는 .env 파일에 등록하면 자동으로 채워집니다.")
 
 client_id = client_id_input.strip() if client_id_input else ""
 client_secret = client_secret_input.strip() if client_secret_input else ""
