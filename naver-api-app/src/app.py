@@ -449,6 +449,98 @@ def generate_ai_response(model, menu, prompt):
    - 성비/연령 분석(여성 비중이 높을 경우)에 맞춰 상품명에 '감성', '정리정돈', '아이방' 등의 타겟 친화형 검색 태그를 추가하여 노출 순위를 방어할 것을 추천합니다.
 """
 
+def render_ai_toolbar():
+    """
+    모든 페이지 우측에 고정 노출되어 현재 원본 데이터 분석 맥락에 맞는 AI 마케팅 가이드를 즉시 생성하는 위젯입니다.
+    """
+    st.markdown("""
+    <div style="background: rgba(30, 41, 59, 0.65); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: 16px; padding: 18px; margin-bottom: 15px; box-shadow: 0 4px 20px rgba(99, 102, 241, 0.1);">
+        <h4 style="color: #818cf8; margin-top: 0; display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 800;">
+            <span>🔮</span> AI 마케팅 코필럿
+        </h4>
+        <p style="color: #94a3b8; font-size: 12px; margin-bottom: 0; line-height: 1.5;">분석 대상 키워드와 상품 성과지표를 추적해 최적의 프로모션 카피와 기획전을 설계합니다.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    model_choice = st.selectbox(
+        "🤖 AI 모델 스위처",
+        ["GPT-4o (OpenAI)", "Claude 3.5 Sonnet", "ChatGPT-3.5", "Gemini 1.5 Pro"],
+        key="persist_ai_model"
+    )
+    
+    current_menu = st.session_state.get("current_menu", "🏠 종합 대시보드")
+    st.markdown(f"""
+    <div style="background: rgba(15, 23, 42, 0.5); border-radius: 10px; padding: 10px 14px; border: 1px dashed rgba(99, 102, 241, 0.25); margin-bottom: 15px;">
+        <span style="color: #94a3b8; font-size: 10px; font-weight: 600; text-transform: uppercase;">📡 현재 분석 데이터 맥락</span><br>
+        <span style="color: #f1f5f9; font-size: 12.5px; font-weight: 700;">{current_menu}</span>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    if "chat_history" not in st.session_state:
+        st.session_state["chat_history"] = []
+        
+    st.markdown("<span style='color: #94a3b8; font-size: 11px; font-weight: 700;'>⚡ 추천 질문 퀵링크</span>", unsafe_allow_html=True)
+    
+    # 퀵 버튼
+    col_q1, col_q2 = st.columns(2)
+    with col_q1:
+        q1_btn = st.button("💡 즉시 마케팅 제안", use_container_width=True, key="quick_q1")
+    with col_q2:
+        q2_btn = st.button("📝 검색광고 카피", use_container_width=True, key="quick_q2")
+        
+    col_q3, col_q4 = st.columns(2)
+    with col_q3:
+        q3_btn = st.button("📈 CVR 개선 전략", use_container_width=True, key="quick_q3")
+    with col_q4:
+        q4_btn = st.button("🔄 대화 내용 리셋", use_container_width=True, key="quick_q4")
+        
+    prompt = ""
+    if q1_btn:
+        prompt = "현재 보고 있는 화면의 지표와 상품 포지셔닝 분포를 분석하여 즉시 실행 가능한 마케팅 액션 제안서를 작성해 줘."
+    elif q2_btn:
+        prompt = "현재 타겟 키워드와 관련된 네이버 쇼핑 검색광고용 헤드카피와 상세문구를 효과적인 셀링포인트와 함께 추천해 줘."
+    elif q3_btn:
+        prompt = "내 쇼핑몰에서 '개선 필요' 및 '노출 과다'로 평가된 상품들의 구매 전환율(CVR)을 끌어올릴 수 있는 상세페이지 기획 전략을 작성해 줘."
+    elif q4_btn:
+        st.session_state["chat_history"] = []
+        st.success("대화 이력이 초기화되었습니다.")
+        st.rerun()
+        
+    user_q = st.text_input("💬 코필럿에게 직접 질문하기", key="persist_user_query_input", placeholder="예: 패션의류 카테고리 광고 효율 높이려면?")
+    send_btn = st.button("전송", type="primary", use_container_width=True, key="send_user_query_btn")
+    
+    if send_btn and user_q:
+        prompt = user_q
+        
+    if prompt:
+        st.session_state["chat_history"].append({"sender": "user", "text": prompt})
+        response_text = generate_ai_response(model_choice, current_menu, prompt)
+        st.session_state["chat_history"].append({"sender": "assistant", "text": response_text})
+        st.rerun()
+        
+    st.markdown("---")
+    st.markdown("##### 💬 코필럿 대화 기록")
+    
+    if not st.session_state["chat_history"]:
+        st.markdown(f"""
+        <div style="background: rgba(30, 41, 59, 0.35); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 10px; padding: 12px; font-size: 12.5px; color: #94a3b8; line-height: 1.6;">
+            반갑습니다! <b>{model_choice}</b> 기반 비즈니스 챗봇 코필럿입니다. 
+            현재 <b>{current_menu}</b> 화면에 로드된 원본 데이터를 바탕으로 맞춤형 마케팅 솔루션을 실시간 조언해 드릴 수 있습니다.
+            위의 퀵링크를 클릭하거나 직접 질문을 입력해 보세요.
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        for msg in reversed(st.session_state["chat_history"]):
+            bg_color = "rgba(99, 102, 241, 0.12)" if msg["sender"] == "assistant" else "rgba(255, 255, 255, 0.05)"
+            border_color = "rgba(99, 102, 241, 0.25)" if msg["sender"] == "assistant" else "rgba(255, 255, 255, 0.08)"
+            sender_name = f"🤖 {model_choice}" if msg["sender"] == "assistant" else "👤 유저 질문"
+            st.markdown(f"""
+            <div style="background: {bg_color}; border: 1px solid {border_color}; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; font-size: 12.5px; line-height: 1.6;">
+                <b style="color: #cbd5e1; font-size: 11px;">{sender_name}</b><br/>
+                <div style="margin-top: 4px; color: #f1f5f9; white-space: pre-wrap;">{msg["text"]}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
 # 3. 사이드바 - 네비게이션 메뉴 (상단) + API 설정 (하단)
 
 # API 키 로드 (환경변수 → Streamlit Secrets → 세션 상태 순)
