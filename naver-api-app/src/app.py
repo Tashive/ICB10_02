@@ -28,59 +28,85 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 커스텀 CSS를 통한 Glassmorphism 및 프리미엄 테마 적용
+# 커스텀 CSS를 통한 프리미엄 라이트 모드 테마 적용
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Noto+Sans+KR:wght@300;400;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
     
     /* 글꼴 적용 */
     html, body, [class*="css"] {
-        font-family: 'Outfit', 'Noto Sans KR', sans-serif;
+        font-family: 'Inter', 'Noto Sans KR', sans-serif;
+        color: #1A1D1A;
     }
     
-    /* 카드 디자인 */
+    /* 메인 앱 배경 */
+    .stApp {
+        background-color: #F3F6F4 !important;
+    }
+    
+    /* 사이드바 스타일 */
+    section[data-testid="stSidebar"] {
+        background-color: #EEF2EF !important;
+        border-right: 1px solid #E0E5E1;
+    }
+    section[data-testid="stSidebar"] [data-testid="stButton"] button[kind="primary"] {
+        background-color: #D2F438 !important;
+        color: #1A1D1A !important;
+        border: none !important;
+        border-radius: 12px !important;
+        font-weight: 600 !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stButton"] button[kind="secondary"] {
+        background-color: transparent !important;
+        color: #4A5568 !important;
+        border: none !important;
+        border-radius: 12px !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stButton"] button[kind="secondary"]:hover {
+        background-color: rgba(210, 244, 56, 0.2) !important;
+    }
+    
+    /* 카드 디자인 (라이트 모드) */
     .metric-card {
-        background: rgba(30, 41, 59, 0.45);
-        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: #FFFFFF;
+        border: 1px solid #E8ECE9;
         border-radius: 16px;
         padding: 22px;
-        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2);
-        backdrop-filter: blur(8px);
-        -webkit-backdrop-filter: blur(8px);
+        box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.04);
         transition: all 0.3s ease;
         margin-bottom: 15px;
     }
     .metric-card:hover {
         transform: translateY(-4px);
-        border-color: rgba(16, 185, 129, 0.4);
-        box-shadow: 0 12px 40px 0 rgba(16, 185, 129, 0.15);
+        border-color: #D2F438;
+        box-shadow: 0 8px 24px 0 rgba(210, 244, 56, 0.15);
     }
     
     /* 텍스트 색상 및 강조 */
     .text-green {
-        color: #10b981 !important;
+        color: #16a34a !important;
         font-weight: 800;
     }
     .text-blue {
-        color: #3b82f6 !important;
+        color: #2563eb !important;
         font-weight: 800;
     }
     .text-purple {
-        color: #8b5cf6 !important;
+        color: #7c3aed !important;
         font-weight: 800;
     }
     .text-red {
-        color: #ef4444 !important;
+        color: #dc2626 !important;
         font-weight: 800;
     }
     .text-orange {
-        color: #f97316 !important;
+        color: #ea580c !important;
         font-weight: 800;
     }
     
     /* 헤더 스타일 */
     .dashboard-title {
-        background: linear-gradient(135deg, #10b981 0%, #3b82f6 50%, #8b5cf6 100%);
+        background: linear-gradient(135deg, #16a34a 0%, #65a30d 50%, #D2F438 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         font-weight: 800;
@@ -91,35 +117,34 @@ st.markdown("""
     /* 구분선 */
     .glow-divider {
         height: 3px;
-        background: linear-gradient(90deg, rgba(16, 185, 129, 0.6) 0%, rgba(57, 130, 246, 0.6) 50%, rgba(139, 92, 246, 0.6) 100%);
+        background: linear-gradient(90deg, #16a34a 0%, #65a30d 40%, #D2F438 100%);
         margin-bottom: 25px;
         border-radius: 2px;
     }
     
     /* 안내 문구 스타일 */
     .info-box {
-        background: rgba(59, 130, 246, 0.1);
-        border-left: 4px solid #3b82f6;
+        background: #EFF6FF;
+        border-left: 4px solid #2563eb;
         padding: 15px;
         border-radius: 0 8px 8px 0;
         margin-bottom: 20px;
+        color: #1A1D1A;
     }
     
-    /* 초록색 스코어카드 */
+    /* 초록색 스코어카드 (라이트 모드) */
     .green-metric-card {
-        background: rgba(16, 185, 129, 0.08);
-        border: 1.5px solid rgba(16, 185, 129, 0.25);
+        background: #ECFDF5;
+        border: 1.5px solid #A7F3D0;
         border-radius: 16px;
         padding: 22px;
-        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2);
-        backdrop-filter: blur(8px);
-        -webkit-backdrop-filter: blur(8px);
+        box-shadow: 0 2px 12px 0 rgba(16, 185, 129, 0.06);
         transition: all 0.3s ease;
     }
     .green-metric-card:hover {
         transform: translateY(-4px);
-        border-color: rgba(16, 185, 129, 0.6);
-        box-shadow: 0 12px 40px 0 rgba(16, 185, 129, 0.25);
+        border-color: #6EE7B7;
+        box-shadow: 0 8px 24px 0 rgba(16, 185, 129, 0.12);
     }
 </style>
 """, unsafe_allow_html=True)
