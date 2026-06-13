@@ -2276,6 +2276,10 @@ with col_main:
         st.session_state[persist_kw_key] = keywords_input
         keywords_list = [k.strip() for k in keywords_input.split(",") if k.strip()]
 
+        if len(keywords_list) > 5:
+            st.error("⚠️ 비교할 검색 키워드는 최대 5개까지만 입력 가능합니다. 입력 개수를 줄여주세요.")
+            st.stop()
+
         col1, col2 = st.columns(2)
         with col1:
             display_num = st.slider("수집할 데이터 개수 (검색어당)", min_value=10, max_value=100, value=st.session_state[persist_display_key], step=10)
@@ -2483,11 +2487,18 @@ with col_main:
                     else:
                         st.info("수집된 상품의 브랜드 정보가 부족합니다.")
 
-                # 상품 리스트 출력 (필터링 및 정렬)
+                # 상품 리스트 출력 (키워드별 탭 적용)
                 st.markdown("### 📋 수집된 상품 상세 리스트")
-                display_df = df_all[["keyword", "title", "lprice", "mallName", "brand", "maker", "category1", "link"]]
-                display_df.columns = ["검색어", "상품명", "최저가 (원)", "판매몰", "브랜드", "제조사", "카테고리", "상품링크"]
-                st.dataframe(display_df, use_container_width=True)
+                tabs = st.tabs([f"🔑 {q}" for q in keywords_list])
+                for i, query in enumerate(keywords_list):
+                    with tabs[i]:
+                        df_q = df_all[df_all["keyword"] == query]
+                        if not df_q.empty:
+                            display_df = df_q[["title", "lprice", "mallName", "brand", "maker", "category1", "link"]]
+                            display_df.columns = ["상품명", "최저가 (원)", "판매몰", "브랜드", "제조사", "카테고리", "상품링크"]
+                            st.dataframe(display_df, use_container_width=True)
+                        else:
+                            st.info("수집된 상품 정보가 없습니다.")
 
             elif menu == "📝 블로그 검색 분석":
                 # 날짜 필터링 적용
@@ -2533,11 +2544,18 @@ with col_main:
                     )
                     st.plotly_chart(fig_blog, use_container_width=True)
 
-                    # 테이블 출력
+                    # 테이블 출력 (키워드별 탭 적용)
                     st.markdown("### 📋 블로그 포스트 리스트 (설정 기간 기준 필터링)")
-                    display_df = df_filtered[["keyword", "title", "bloggername", "postdate", "link"]]
-                    display_df.columns = ["검색어", "제목", "블로거", "작성일", "링크"]
-                    st.dataframe(display_df, use_container_width=True)
+                    tabs = st.tabs([f"🔑 {q}" for q in keywords_list])
+                    for i, query in enumerate(keywords_list):
+                        with tabs[i]:
+                            df_q = df_filtered[df_filtered["keyword"] == query]
+                            if not df_q.empty:
+                                display_df = df_q[["title", "bloggername", "postdate", "link"]]
+                                display_df.columns = ["제목", "블로거", "작성일", "링크"]
+                                st.dataframe(display_df, use_container_width=True)
+                            else:
+                                st.info("설정 기간 내 수집된 포스트가 없습니다.")
 
             elif menu == "👥 카페글 검색 분석":
                 # KPI 요약
@@ -2573,11 +2591,18 @@ with col_main:
                 )
                 st.plotly_chart(fig_cafe, use_container_width=True)
 
-                # 테이블 출력
+                # 테이블 출력 (키워드별 탭 적용)
                 st.markdown("### 📋 카페 게시글 리스트")
-                display_df = df_all[["keyword", "title", "cafename", "link"]]
-                display_df.columns = ["검색어", "제목", "카페이름", "링크"]
-                st.dataframe(display_df, use_container_width=True)
+                tabs = st.tabs([f"🔑 {q}" for q in keywords_list])
+                for i, query in enumerate(keywords_list):
+                    with tabs[i]:
+                        df_q = df_all[df_all["keyword"] == query]
+                        if not df_q.empty:
+                            display_df = df_q[["title", "cafename", "link"]]
+                            display_df.columns = ["제목", "카페이름", "링크"]
+                            st.dataframe(display_df, use_container_width=True)
+                        else:
+                            st.info("수집된 카페 게시글이 없습니다.")
 
             elif menu == "📰 뉴스 검색 분석":
                 # 날짜 필터링 적용
@@ -2624,11 +2649,18 @@ with col_main:
                     )
                     st.plotly_chart(fig_news, use_container_width=True)
 
-                    # 테이블 출력
+                    # 테이블 출력 (키워드별 탭 적용)
                     st.markdown("### 📋 뉴스 기사 리스트 (설정 기간 기준 필터링)")
-                    display_df = df_filtered[["keyword", "title", "pubDate", "link", "originallink"]]
-                    display_df.columns = ["검색어", "기사제목", "발행시간", "네이버뉴스링크", "원문링크"]
-                    st.dataframe(display_df, use_container_width=True)
+                    tabs = st.tabs([f"🔑 {q}" for q in keywords_list])
+                    for i, query in enumerate(keywords_list):
+                        with tabs[i]:
+                            df_q = df_filtered[df_filtered["keyword"] == query]
+                            if not df_q.empty:
+                                display_df = df_q[["title", "pubDate", "link", "originallink"]]
+                                display_df.columns = ["기사제목", "발행시간", "네이버뉴스링크", "원문링크"]
+                                st.dataframe(display_df, use_container_width=True)
+                            else:
+                                st.info("설정 기간 내 수집된 기사가 없습니다.")
 # AI 툴바 컬럼 시작 (우측)
 with col_ai:
     render_ai_toolbar()
