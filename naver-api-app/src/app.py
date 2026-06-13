@@ -587,11 +587,9 @@ div[data-testid="stSidebarNav"] { display: none; }
 """, unsafe_allow_html=True)
 
 # ── 안내 섹션 ──
-st.sidebar.markdown('<div class="sidebar-section-header">안내</div>', unsafe_allow_html=True)
-
 menu_all = [
-    "🏠 종합 대시보드",
     "🏠 대시보드 소개",
+    "🏠 종합 대시보드",
     "📈 검색어 트렌드 분석",
     "🛍️ 쇼핑 트렌드 분석",
     "📦 내 쇼핑몰 상품 진단",
@@ -717,6 +715,53 @@ if "내 쇼핑몰" in display_title or "종합 대시보드" in display_title:
 else:
     st.markdown(f'<div class="dashboard-title">네이버 {display_title} 대시보드</div>', unsafe_allow_html=True)
 st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
+
+# 🏠 대시보드 소개인 경우 AI 마케팅 코필럿 없이 전체 화면 너비로 표시
+if menu == "🏠 대시보드 소개":
+    st.markdown("""
+    <div style="background: rgba(30,41,59,0.6); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 30px; margin-bottom: 24px;">
+        <h2 style="color: #10b981; margin-top: 0;">📊 Naver API Insight Dashboard 소개</h2>
+        <p style="color: #cbd5e1; font-size: 15px; line-height: 1.8;">
+            본 대시보드는 <b>네이버 오픈 API</b>를 활용하여 다양한 트렌드 및 검색 데이터를 수집, 분석, 시각화하는 도구입니다.
+            왼쪽 사이드바에서 원하는 분석 메뉴를 선택하여 시작하세요.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("""
+        <div class="metric-card">
+            <div style="font-size: 28px; margin-bottom: 10px;">📈</div>
+            <div style="color: #10b981; font-weight: 700; font-size: 16px; margin-bottom: 6px;">데이터랩 트렌드 분석</div>
+            <div style="color: #94a3b8; font-size: 13px; line-height: 1.6;">검색어 트렌드 및 쇼핑 카테고리별 클릭 트렌드를 시계열로 분석합니다.</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with col2:
+        st.markdown("""
+        <div class="metric-card">
+            <div style="font-size: 28px; margin-bottom: 10px;">📦</div>
+            <div style="color: #8b5cf6; font-weight: 700; font-size: 16px; margin-bottom: 6px;">내 쇼핑몰 상품 진단</div>
+            <div style="color: #94a3b8; font-size: 13px; line-height: 1.6;">쇼핑몰 판매/실적 리포트를 업로드하여 BCG 분석과 맞춤형 액션 플랜을 제안합니다.</div>
+        </div>
+        """, unsafe_allow_html=True)
+    col3, col4 = st.columns(2)
+    with col3:
+        st.markdown("""
+        <div class="metric-card">
+            <div style="font-size: 28px; margin-bottom: 10px;">🔍</div>
+            <div style="color: #3b82f6; font-weight: 700; font-size: 16px; margin-bottom: 6px;">검색 데이터 다차원 분석</div>
+            <div style="color: #94a3b8; font-size: 13px; line-height: 1.6;">쇼핑, 블로그, 카페, 뉴스 검색 데이터를 수집하고 다각도로 분석합니다.</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with col4:
+        st.markdown("""
+        <div class="metric-card">
+            <div style="font-size: 28px; margin-bottom: 10px;">🔑</div>
+            <div style="color: #f59e0b; font-weight: 700; font-size: 16px; margin-bottom: 6px;">API 설정 방법</div>
+            <div style="color: #94a3b8; font-size: 13px; line-height: 1.6;">왼쪽 사이드바 하단의 NAVER API 설정에 Client ID와 Secret을 입력하세요.</div>
+        </div>
+        """, unsafe_allow_html=True)
+    st.stop()
 
 # 레이아웃 컬럼 설정 (메인 75% / AI 툴바 25%)
 col_main, col_ai = st.columns([13, 4])
@@ -899,52 +944,6 @@ with col_main:
             </div>
             """, unsafe_allow_html=True)
 
-    # 1. 기존 소개 페이지
-    elif menu == "🏠 대시보드 소개":
-        st.markdown("""
-        <div style="background: rgba(30,41,59,0.6); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 30px; margin-bottom: 24px;">
-            <h2 style="color: #10b981; margin-top: 0;">📊 Naver API Insight Dashboard 소개</h2>
-            <p style="color: #cbd5e1; font-size: 15px; line-height: 1.8;">
-                본 대시보드는 <b>네이버 오픈 API</b>를 활용하여 다양한 트렌드 및 검색 데이터를 수집, 분석, 시각화하는 도구입니다.
-                왼쪽 사이드바에서 원하는 분석 메뉴를 선택하여 시작하세요.
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("""
-            <div class="metric-card">
-                <div style="font-size: 28px; margin-bottom: 10px;">📈</div>
-                <div style="color: #10b981; font-weight: 700; font-size: 16px; margin-bottom: 6px;">데이터랩 트렌드 분석</div>
-                <div style="color: #94a3b8; font-size: 13px; line-height: 1.6;">검색어 트렌드 및 쇼핑 카테고리별 클릭 트렌드를 시계열로 분석합니다.</div>
-            </div>
-            """, unsafe_allow_html=True)
-        with col2:
-            st.markdown("""
-            <div class="metric-card">
-                <div style="font-size: 28px; margin-bottom: 10px;">📦</div>
-                <div style="color: #8b5cf6; font-weight: 700; font-size: 16px; margin-bottom: 6px;">내 쇼핑몰 상품 진단</div>
-                <div style="color: #94a3b8; font-size: 13px; line-height: 1.6;">쇼핑몰 판매/실적 리포트를 업로드하여 BCG 분석과 맞춤형 액션 플랜을 제안합니다.</div>
-            </div>
-            """, unsafe_allow_html=True)
-        col3, col4 = st.columns(2)
-        with col3:
-            st.markdown("""
-            <div class="metric-card">
-                <div style="font-size: 28px; margin-bottom: 10px;">🔍</div>
-                <div style="color: #3b82f6; font-weight: 700; font-size: 16px; margin-bottom: 6px;">검색 데이터 다차원 분석</div>
-                <div style="color: #94a3b8; font-size: 13px; line-height: 1.6;">쇼핑, 블로그, 카페, 뉴스 검색 데이터를 수집하고 다각도로 분석합니다.</div>
-            </div>
-            """, unsafe_allow_html=True)
-        with col4:
-            st.markdown("""
-            <div class="metric-card">
-                <div style="font-size: 28px; margin-bottom: 10px;">🔑</div>
-                <div style="color: #f59e0b; font-weight: 700; font-size: 16px; margin-bottom: 6px;">API 설정 방법</div>
-                <div style="color: #94a3b8; font-size: 13px; line-height: 1.6;">왼쪽 사이드바 하단의 NAVER API 설정에 Client ID와 Secret을 입력하세요.</div>
-            </div>
-            """, unsafe_allow_html=True)
-        st.stop()
 
     # API 키 누락 예외 처리
     if menu != "📦 내 쇼핑몰 상품 진단" and (not client_id or not client_secret):
