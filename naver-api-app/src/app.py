@@ -134,14 +134,12 @@ def make_card(title, value, subtitle="", color_class=""):
     </div>
     """, unsafe_allow_html=True)
 
-# 3. 사이드바 - API 인증 정보 및 글로벌 설정
-st.sidebar.markdown("### 🔑 Naver API Credentials")
+# 3. 사이드바 - 네비게이션 메뉴 (상단) + API 설정 (하단)
 
-# 1순위: 로컬 환경 변수 (.env)
+# API 키 로드 (환경변수 → Streamlit Secrets → 세션 상태 순)
 env_client_id = os.getenv("NAVER_CLIENT_ID", "")
 env_client_secret = os.getenv("NAVER_CLIENT_SECRET", "")
 
-# 2순위: Streamlit Secrets
 secrets_client_id = env_client_id
 secrets_client_secret = env_client_secret
 
@@ -153,65 +151,189 @@ if not secrets_client_id or not secrets_client_secret:
         secrets_client_id = ""
         secrets_client_secret = ""
 
-# 3순위: 세션 상태 (수동 입력 보류용) 또는 빈 값
 default_client_id = secrets_client_id if secrets_client_id else st.session_state.get("client_id", "")
 default_client_secret = secrets_client_secret if secrets_client_secret else st.session_state.get("client_secret", "")
 
-# 사이드바 입력 폼 (이것을 통해 사용자가 직접 수동 입력 가능)
-client_id_input = st.sidebar.text_input("Naver Client ID", value=default_client_id, type="password", help="네이버 개발자 센터에서 발급받은 Client ID를 입력하세요. Streamlit 설정 또는 .env 파일에 등록하면 자동으로 채워집니다.")
-client_secret_input = st.sidebar.text_input("Naver Client Secret", value=default_client_secret, type="password", help="네이버 개발자 센터에서 발급받은 Client Secret을 입력하세요. Streamlit 설정 또는 .env 파일에 등록하면 자동으로 채워집니다.")
+# 사이드바 스타일 추가
+st.sidebar.markdown("""
+<style>
+[data-testid="stSidebar"] {
+    background-color: #1e293b;
+}
+.sidebar-section-header {
+    color: #94a3b8;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 10px 0 6px 0;
+    margin-top: 4px;
+}
+.sidebar-api-header {
+    color: #f8fafc;
+    font-size: 15px;
+    font-weight: 700;
+    padding: 6px 0 10px 0;
+}
+div[data-testid="stSidebarNav"] { display: none; }
+</style>
+""", unsafe_allow_html=True)
+
+# ── 안내 섹션 ──
+st.sidebar.markdown('<div class="sidebar-section-header">안내</div>', unsafe_allow_html=True)
+
+menu_all = [
+    "🏠 대시보드 소개",
+    "📈 검색어 트렌드 분석",
+    "🛍️ 쇼핑 트렌드 분석",
+    "🛒 쇼핑 검색 분석",
+    "📝 블로그 검색 분석",
+    "👥 카페글 검색 분석",
+    "📰 뉴스 검색 분석",
+]
+
+# 세션 상태에서 현재 선택된 메뉴 가져오기
+if "current_menu" not in st.session_state:
+    st.session_state["current_menu"] = "🏠 대시보드 소개"
+
+def set_menu(selected):
+    """메뉴 선택 콜백 함수"""
+    st.session_state["current_menu"] = selected
+
+# 안내 섹션
+for item in ["🏠 대시보드 소개"]:
+    is_active = st.session_state["current_menu"] == item
+    btn_style = "primary" if is_active else "secondary"
+    if st.sidebar.button(item, key=f"menu_{item}", use_container_width=True, type=btn_style):
+        set_menu(item)
+        st.rerun()
+
+# 데이터랩 트렌드 분석 섹션
+st.sidebar.markdown('<div class="sidebar-section-header">데이터랩 트렌드 분석</div>', unsafe_allow_html=True)
+for item in ["📈 검색어 트렌드 분석", "🛍️ 쇼핑 트렌드 분석"]:
+    is_active = st.session_state["current_menu"] == item
+    btn_style = "primary" if is_active else "secondary"
+    if st.sidebar.button(item, key=f"menu_{item}", use_container_width=True, type=btn_style):
+        set_menu(item)
+        st.rerun()
+
+# 검색 데이터 다차원 분석 섹션
+st.sidebar.markdown('<div class="sidebar-section-header">검색 데이터 다차원 분석</div>', unsafe_allow_html=True)
+for item in ["🛒 쇼핑 검색 분석", "📝 블로그 검색 분석", "👥 카페글 검색 분석", "📰 뉴스 검색 분석"]:
+    is_active = st.session_state["current_menu"] == item
+    btn_style = "primary" if is_active else "secondary"
+    if st.sidebar.button(item, key=f"menu_{item}", use_container_width=True, type=btn_style):
+        set_menu(item)
+        st.rerun()
+
+menu = st.session_state["current_menu"]
+
+# ── 구분선 ──
+st.sidebar.markdown("---")
+
+# ── 하단: NAVER API 설정 섹션 ──
+st.sidebar.markdown('<div class="sidebar-api-header">🔑 NAVER API 설정</div>', unsafe_allow_html=True)
+
+client_id_input = st.sidebar.text_input("Naver Client ID", value=default_client_id, type="password", help="네이버 개발자 센터에서 발급받은 Client ID를 입력하세요.")
+client_secret_input = st.sidebar.text_input("Naver Client Secret", value=default_client_secret, type="password", help="네이버 개발자 센터에서 발급받은 Client Secret을 입력하세요.")
 
 client_id = client_id_input.strip() if client_id_input else ""
 client_secret = client_secret_input.strip() if client_secret_input else ""
 
-# 세션 상태에 저장
 if client_id: st.session_state["client_id"] = client_id
 if client_secret: st.session_state["client_secret"] = client_secret
 
-# 연결 상태 표시기
+# API 연결 상태 표시
 if client_id and client_secret:
     st.sidebar.markdown(
         """
-        <div style="background-color: #10b981; color: white; padding: 12px; border-radius: 8px; font-weight: bold; display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
-            <span style="font-size: 1.1em;">\u2705</span>
+        <div style="background-color: #10b981; color: white; padding: 12px 14px; border-radius: 10px; font-weight: 600; display: flex; align-items: center; gap: 10px; margin-top: 8px; font-size: 14px;">
+            <span>&#9989;</span>
             <span>API 인증 키를 성공적으로 로드했습니다.</span>
         </div>
         """,
         unsafe_allow_html=True
     )
 else:
-    st.sidebar.warning("API Keys Required")
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🧭 Navigation")
-menu = st.sidebar.radio(
-    "원하는 분석 페이지를 선택하세요:",
-    [
-        "📈 검색어 트렌드",
-        "🛍️ 쇼핑 트렌드 (인사이트)",
-        "🛒 쇼핑 검색",
-        "📝 블로그 검색",
-        "☕ 카페글 검색",
-        "📰 뉴스 검색"
-    ]
-)
-
-st.sidebar.markdown("---")
-st.sidebar.markdown("<small>Powered by Naver Open API & Streamlit</small>", unsafe_allow_html=True)
+    st.sidebar.markdown(
+        """
+        <div style="background-color: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.4); color: #fca5a5; padding: 12px 14px; border-radius: 10px; font-weight: 600; display: flex; align-items: center; gap: 10px; margin-top: 8px; font-size: 14px;">
+            <span>&#9888;</span>
+            <span>API Key를 입력해 주세요.</span>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 # 4. 공통 검색 조건 입력 컴포넌트 (메인 화면 상단)
-display_title = "네이버 검색어 트렌드" if menu == "📈 검색어 트렌드" else menu
-st.markdown(f'<div class="dashboard-title">{display_title} 분석 대시보드</div>', unsafe_allow_html=True)
+# 메뉴명 → 타이틀 매핑
+menu_title_map = {
+    "🏠 대시보드 소개": "대시보드 소개",
+    "📈 검색어 트렌드 분석": "검색어 트렌드",
+    "🛍️ 쇼핑 트렌드 분석": "쇼핑 트렌드 (인사이트)",
+    "🛒 쇼핑 검색 분석": "쇼핑 검색",
+    "📝 블로그 검색 분석": "블로그 검색",
+    "👥 카페글 검색 분석": "카페글 검색",
+    "📰 뉴스 검색 분석": "뉴스 검색",
+}
+display_title = menu_title_map.get(menu, menu)
+st.markdown(f'<div class="dashboard-title">네이버 {display_title} 대시보드</div>', unsafe_allow_html=True)
 st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
+
+# 대시보드 소개 페이지
+if menu == "🏠 대시보드 소개":
+    st.markdown("""
+    <div style="background: rgba(30,41,59,0.6); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 30px; margin-bottom: 24px;">
+        <h2 style="color: #10b981; margin-top: 0;">📊 Naver API Insight Dashboard 소개</h2>
+        <p style="color: #cbd5e1; font-size: 15px; line-height: 1.8;">
+            본 대시보드는 <b>네이버 오픈 API</b>를 활용하여 다양한 트렌드 및 검색 데이터를 수집, 분석, 시각화하는 도구입니다.
+            왼쪽 사이드바에서 원하는 분석 메뉴를 선택하여 시작하세요.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("""
+        <div class="metric-card">
+            <div style="font-size: 28px; margin-bottom: 10px;">📈</div>
+            <div style="color: #10b981; font-weight: 700; font-size: 16px; margin-bottom: 6px;">데이터랩 트렌드 분석</div>
+            <div style="color: #94a3b8; font-size: 13px; line-height: 1.6;">검색어 트렌드 및 쇼핑 카테고리별 클릭 트렌드를 시계열로 분석합니다.</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with col2:
+        st.markdown("""
+        <div class="metric-card">
+            <div style="font-size: 28px; margin-bottom: 10px;">🔍</div>
+            <div style="color: #3b82f6; font-weight: 700; font-size: 16px; margin-bottom: 6px;">검색 데이터 다차원 분석</div>
+            <div style="color: #94a3b8; font-size: 13px; line-height: 1.6;">쇼핑, 블로그, 카페, 뉴스 검색 데이터를 수집하고 다각도로 분석합니다.</div>
+        </div>
+        """, unsafe_allow_html=True)
+    col3, col4 = st.columns(2)
+    with col3:
+        st.markdown("""
+        <div class="metric-card">
+            <div style="font-size: 28px; margin-bottom: 10px;">📊</div>
+            <div style="color: #8b5cf6; font-weight: 700; font-size: 16px; margin-bottom: 6px;">인터랙티브 시각화</div>
+            <div style="color: #94a3b8; font-size: 13px; line-height: 1.6;">모든 차트는 Plotly 기반으로 인터랙티브하게 제공됩니다.</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with col4:
+        st.markdown("""
+        <div class="metric-card">
+            <div style="font-size: 28px; margin-bottom: 10px;">🔑</div>
+            <div style="color: #f59e0b; font-weight: 700; font-size: 16px; margin-bottom: 6px;">API 설정 방법</div>
+            <div style="color: #94a3b8; font-size: 13px; line-height: 1.6;">왼쪽 사이드바 하단의 NAVER API 설정에 Client ID와 Secret을 입력하세요.</div>
+        </div>
+        """, unsafe_allow_html=True)
+    st.stop()
 
 # API 키 누락 예외 처리
 if not client_id or not client_secret:
-    st.info("👈 왼쪽 사이드바 메뉴에서 **Naver API Client ID**와 **Client Secret**을 먼저 입력해 주세요.")
-    st.image("https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80", caption="Naver API Insight Dashboard", use_container_width=True)
+    st.info("👈 왼쪽 사이드바 하단의 **NAVER API 설정**에서 Client ID와 Client Secret을 먼저 입력해 주세요.")
     st.stop()
 
 # 5. 각 페이지별 대시보드 구현
-if menu == "📈 검색어 트렌드":
+if menu == "📈 검색어 트렌드 분석":
     st.markdown("### 🔍 검색어 트렌드 조건 설정")
     
     col1, col2 = st.columns([2, 1])
@@ -350,7 +472,7 @@ if menu == "📈 검색어 트렌드":
                 except Exception as e:
                     st.error(f"데이터 수집 중 오류가 발생했습니다: {e}")
 
-elif menu == "🛍️ 쇼핑 트렌드 (인사이트)":
+elif menu == "🛍️ 쇼핑 트렌드 분석":
     st.markdown("### 🛍️ 쇼핑 카테고리 클릭 트렌드 설정")
     
     # 세션 상태에 선택된 카테고리 목록 초기화
@@ -612,7 +734,7 @@ else:
     st.markdown("### 🔍 검색 조건 및 대상 키워드 설정")
     
     default_keyword = "갤럭시 S24, 아이폰 15"
-    if menu == "🛒 쇼핑 검색":
+    if menu == "🛒 쇼핑 검색 분석":
         default_keyword = "기계식 키보드, 게이밍 마우스"
         
     keywords_input = st.text_input("검색 키워드 입력 (쉼표 ','로 구분하여 여러 개 비교 가능)", value=default_keyword, help="비교 분석할 상품/검색어를 쉼표로 구분하여 입력하세요.")
@@ -635,26 +757,26 @@ else:
     with col_end:
         end_date = st.date_input("조회 종료일", value=datetime.now())
 
-    if menu in ["🛒 쇼핑 검색", "☕ 카페글 검색"]:
+    if menu in ["🛒 쇼핑 검색 분석", "👥 카페글 검색 분석"]:
         st.markdown(f"""
         <div class="info-box">
-            ⚠️ <b>안내:</b> 네이버 {menu} API는 작성일/등록일 메타데이터를 직접 반환하지 않아 날짜 필터링이 적용되지 않으며, 
+            ⚠️ <b>안내:</b> 네이버 {display_title} API는 작성일/등록일 메타데이터를 직접 반환하지 않아 날짜 필터링이 적용되지 않으며, 
             지정한 조건(수집 개수, 정렬)에 기반한 최신 수집 데이터로 비교 분석을 제공합니다.
         </div>
         """, unsafe_allow_html=True)
     else:
         st.markdown(f"""
         <div class="info-box">
-            💡 <b>기간 필터링 작동 방식:</b> 네이버 {menu} API로 수집한 최신 데이터(최대 {display_num}개) 중 
+            💡 <b>기간 필터링 작동 방식:</b> 네이버 {display_title} API로 수집한 최신 데이터(최대 {display_num}개) 중 
             설정하신 기간(<b>{start_date} ~ {end_date}</b>)에 해당하는 데이터를 필터링하여 시계열 및 랭킹 요약을 제공합니다.
         </div>
         """, unsafe_allow_html=True)
 
-    if st.button(f"{menu} 수집 및 통계 분석 실행", type="primary"):
+    if st.button(f"{display_title} 수집 및 통계 분석 실행", type="primary"):
         if not keywords_list:
             st.warning("검색 키워드를 입력해 주세요.")
         else:
-            if menu == "🛒 쇼핑 검색":
+            if menu == "🛒 쇼핑 검색 분석":
                 with st.spinner("네이버 쇼핑 API 검색 데이터 수집 중..."):
                     try:
                         df_list = []
@@ -752,7 +874,7 @@ else:
                     except Exception as e:
                         st.error(f"쇼핑 데이터 수집 실패: {e}")
 
-            elif menu == "📝 블로그 검색":
+            elif menu == "📝 블로그 검색 분석":
                 with st.spinner("네이버 블로그 검색 데이터 수집 중..."):
                     try:
                         df_list = []
@@ -840,7 +962,7 @@ else:
                     except Exception as e:
                         st.error(f"블로그 데이터 수집 실패: {e}")
 
-            elif menu == "☕ 카페글 검색":
+            elif menu == "👥 카페글 검색 분석":
                 with st.spinner("네이버 카페글 데이터 수집 중..."):
                     try:
                         df_list = []
@@ -900,7 +1022,7 @@ else:
                     except Exception as e:
                         st.error(f"카페글 데이터 수집 실패: {e}")
 
-            elif menu == "📰 뉴스 검색":
+            elif menu == "📰 뉴스 검색 분석":
                 with st.spinner("네이버 뉴스 데이터 수집 중..."):
                     try:
                         df_list = []
