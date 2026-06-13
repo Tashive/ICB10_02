@@ -104,6 +104,23 @@ st.markdown("""
         border-radius: 0 8px 8px 0;
         margin-bottom: 20px;
     }
+    
+    /* 초록색 스코어카드 */
+    .green-metric-card {
+        background: rgba(16, 185, 129, 0.08);
+        border: 1.5px solid rgba(16, 185, 129, 0.25);
+        border-radius: 16px;
+        padding: 22px;
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        transition: all 0.3s ease;
+    }
+    .green-metric-card:hover {
+        transform: translateY(-4px);
+        border-color: rgba(16, 185, 129, 0.6);
+        box-shadow: 0 12px 40px 0 rgba(16, 185, 129, 0.25);
+    }
 </style>
 """, unsafe_allow_html=True)
 
