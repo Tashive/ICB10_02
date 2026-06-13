@@ -1894,6 +1894,7 @@ with col_main:
                 st.markdown("---")
                 if st.button("🚀 내 쇼핑몰 상품 진단 실행", type="primary", use_container_width=True):
                     st.session_state["diagnose_df"] = df_cleaned
+                    st.session_state["diagnose_is_preset"] = False
                     st.session_state["diagnose_run"] = True
                     st.session_state["diagnose_warnings"] = warning_messages if warning_triggered else []
                     st.rerun()
