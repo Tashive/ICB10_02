@@ -789,6 +789,13 @@ elif menu == "🛍️ 쇼핑 트렌드 분석":
     with col6:
         ages = st.multiselect("연령대 필터 (선택 안 하면 전체)", options=["10", "20", "30", "40", "50", "60"])
 
+    st.markdown("#### 📂 실제 스마트스토어 실적 데이터 분석 연동 (선택사항)")
+    uploaded_file = st.file_uploader(
+        "스마트스토어에서 다운로드한 상품/판매 실적 엑셀 또는 CSV 파일을 업로드해 주세요. 업로드 시 실제 데이터와 네이버 쇼핑 트렌드를 연동하여 정밀 분석합니다.", 
+        type=["xlsx", "xls", "csv"], 
+        help="스마트스토어의 상품별 실적분석 엑셀 보고서 포맷을 자동으로 인식해 컬럼을 파싱합니다."
+    )
+
     if st.button("쇼핑 트렌드 분석 실행", type="primary"):
         if not st.session_state["selected_shopping_categories"]:
             st.warning("최소 하나의 쇼핑 카테고리를 비교 목록에 추가해 주세요.")
