@@ -1,3 +1,17 @@
+# 📊 Naver API Insight Dashboard 프로젝트 배포 완료 (`v1.0.0`)
+
+## 🔗 Streamlit 서비스 접속 주소
+* **배포 URL**: [https://icb1002-l6oj3njr57og9w4vj69rnn.streamlit.app/](https://icb1002-l6oj3njr57og9w4vj69rnn.streamlit.app/)
+
+## 🛠️ v1.0.0 주요 업데이트 요약
+1. **API 인증 정보 관리 체계 개선** (로컬 `.env`/`secrets.toml` 및 배포 서버 `st.secrets` 하이브리드 지원 및 수동 입력 폴백 구현)
+2. **자동 커밋 및 푸시 훅(Hook) 시스템 구축** (Git `post-commit` 훅 설정 및 실시간 변경사항 감시 백그라운드 데몬 `auto_git_sync.py` 적용)
+3. **통계 분석 및 시각화 기능 오류 수정** (의존성 라이브러리에 `matplotlib`를 명시적으로 추가하여 Pandas Styler 그라데이션 테이블 렌더링 에러 해결)
+
+*상세 개발 명세 및 파일 구조는 [naver-api-app/README.md](naver-api-app/README.md) 문서를 참고해 주세요.*
+
+---
+
 ## STEP 0. 팀 구성 및 협업 환경 세팅
 
 ### 슬랙 세팅
