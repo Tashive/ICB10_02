@@ -2244,25 +2244,56 @@ with col_main:
         if menu == "🛒 쇼핑 검색 분석":
             default_keyword = "기계식 키보드, 게이밍 마우스"
 
-        keywords_input = st.text_input("검색 키워드 입력 (쉼표 ','로 구분하여 여러 개 비교 가능)", value=default_keyword, help="비교 분석할 상품/검색어를 쉼표로 구분하여 입력하세요.")
+        # Initialize input persistence keys
+        persist_kw_key = f"persist_search_kw_{menu}"
+        persist_display_key = f"persist_search_display_{menu}"
+        persist_sort_key = f"persist_search_sort_{menu}"
+        persist_start_key = f"persist_search_start_{menu}"
+        persist_end_key = f"persist_search_end_{menu}"
+
+        if persist_kw_key not in st.session_state:
+            st.session_state[persist_kw_key] = default_keyword
+        if persist_display_key not in st.session_state:
+            st.session_state[persist_display_key] = 30
+        if persist_sort_key not in st.session_state:
+            st.session_state[persist_sort_key] = "sim"
+        if persist_start_key not in st.session_state:
+            st.session_state[persist_start_key] = (datetime.now() - timedelta(days=30)).date()
+        if persist_end_key not in st.session_state:
+            st.session_state[persist_end_key] = datetime.now().date()
+
+        keywords_input = st.text_input("검색 키워드 입력 (쉼표 ','로 구분하여 여러 개 비교 가능)", value=st.session_state[persist_kw_key], help="비교 분석할 상품/검색어를 쉼표로 구분하여 입력하세요.")
+        st.session_state[persist_kw_key] = keywords_input
         keywords_list = [k.strip() for k in keywords_input.split(",") if k.strip()]
 
         col1, col2 = st.columns(2)
         with col1:
-            display_num = st.slider("수집할 데이터 개수 (검색어당)", min_value=10, max_value=100, value=30, step=10)
+            display_num = st.slider("수집할 데이터 개수 (검색어당)", min_value=10, max_value=100, value=st.session_state[persist_display_key], step=10)
+            st.session_state[persist_display_key] = display_num
         with col2:
-            if menu == "🛒 쇼핑 검색":
-                sort_type = st.selectbox("정렬 순서", ["sim", "date", "asc", "dsc"], format_func=lambda x: {"sim": "유사도순", "date": "최신등록순", "asc": "가격낮은순", "dsc": "가격높은순"}[x])
+            if menu == "🛒 쇼핑 검색 분석":
+                # Find matching index or default to sim
+                sort_opts = ["sim", "date", "asc", "dsc"]
+                current_sort = st.session_state[persist_sort_key]
+                sort_idx = sort_opts.index(current_sort) if current_sort in sort_opts else 0
+                sort_type = st.selectbox("정렬 순서", sort_opts, index=sort_idx, format_func=lambda x: {"sim": "유사도순", "date": "최신등록순", "asc": "가격낮은순", "dsc": "가격높은순"}[x])
+                st.session_state[persist_sort_key] = sort_type
             else:
-                sort_type = st.selectbox("정렬 순서", ["sim", "date"], format_func=lambda x: {"sim": "유사도순", "date": "최신작성순"}[x])
+                sort_opts = ["sim", "date"]
+                current_sort = st.session_state[persist_sort_key]
+                sort_idx = sort_opts.index(current_sort) if current_sort in sort_opts else 0
+                sort_type = st.selectbox("정렬 순서", sort_opts, index=sort_idx, format_func=lambda x: {"sim": "유사도순", "date": "최신작성순"}[x])
+                st.session_state[persist_sort_key] = sort_type
 
         # 검색 기간 설정 (블로그, 뉴스에서 사용)
         st.markdown("### 📅 기간 설정 (블로그, 뉴스 검색에만 실시간 적용)")
         col_start, col_end = st.columns(2)
         with col_start:
-            start_date = st.date_input("조회 시작일", value=datetime.now() - timedelta(days=30))
+            start_date = st.date_input("조회 시작일", value=st.session_state[persist_start_key])
+            st.session_state[persist_start_key] = start_date
         with col_end:
-            end_date = st.date_input("조회 종료일", value=datetime.now())
+            end_date = st.date_input("조회 종료일", value=st.session_state[persist_end_key])
+            st.session_state[persist_end_key] = end_date
 
         if menu in ["🛒 쇼핑 검색 분석", "👥 카페글 검색 분석"]:
             st.markdown(f"""
@@ -2279,13 +2310,22 @@ with col_main:
             </div>
             """, unsafe_allow_html=True)
 
+        search_df_key = f"search_df_{menu}"
+        search_run_key = f"search_run_{menu}"
+
+        if search_run_key not in st.session_state:
+            st.session_state[search_run_key] = False
+        if search_df_key not in st.session_state:
+            st.session_state[search_df_key] = None
+
         if st.button(f"{display_title} 수집 및 통계 분석 실행", type="primary"):
             if not keywords_list:
                 st.warning("검색 키워드를 입력해 주세요.")
             else:
-                if menu == "🛒 쇼핑 검색 분석":
-                    with st.spinner("네이버 쇼핑 API 검색 데이터 수집 중..."):
-                        try:
+                try:
+                    df_all = None
+                    if menu == "🛒 쇼핑 검색 분석":
+                        with st.spinner("네이버 쇼핑 API 검색 데이터 수집 중..."):
                             df_list = []
                             for query in keywords_list:
                                 data = cached_shopping_search(client_id, client_secret, query, display_num, 1, sort_type, "", "")
@@ -2297,93 +2337,11 @@ with col_main:
                                     df["title"] = df["title"].str.replace("<b>", "").str.replace("</b>", "")
                                     df["keyword"] = query
                                     df_list.append(df)
-
-                            if not df_list:
-                                st.warning("수집된 상품 정보가 없습니다.")
-                            else:
+                            if df_list:
                                 df_all = pd.concat(df_list, ignore_index=True)
 
-                                # KPI 요약 카드
-                                st.markdown("### 🛍️ 검색어별 가격 및 상품 분포 비교")
-                                kpi_cols = st.columns(len(df_list))
-                                for i, query in enumerate(keywords_list):
-                                    df_q = df_all[df_all["keyword"] == query]
-                                    if not df_q.empty:
-                                        avg_price = df_q[df_q["lprice"] > 0]["lprice"].mean()
-                                        min_price = df_q[df_q["lprice"] > 0]["lprice"].min()
-                                        colors = ["text-green", "text-blue", "text-purple", "text-green", "text-blue"]
-                                        with kpi_cols[i]:
-                                            make_card(
-                                                f"🛒 {query} 평균최저가", 
-                                                f"{int(avg_price):,}원", 
-                                                f"최저가: {int(min_price):,}원 (수집: {len(df_q)}개)",
-                                                color_class=colors[i % len(colors)]
-                                            )
-
-                                # 시각화 1: 박스 플롯 가격 비교 (IQR 이상치 식별에 최적)
-                                st.markdown("### 💵 키워드별 상품 최저가 분포 비교 (Box Plot)")
-                                fig_box = px.box(
-                                    df_all[df_all["lprice"] > 0], x="keyword", y="lprice", color="keyword",
-                                    labels={"lprice": "최저 가격 (원)", "keyword": "검색어"},
-                                    title="검색 키워드별 상품 최저가 분포 현황 및 극단값(Outlier) 시각화",
-                                    template="plotly_dark"
-                                )
-                                fig_box.update_layout(
-                                    plot_bgcolor="rgba(0,0,0,0)",
-                                    paper_bgcolor="rgba(0,0,0,0)"
-                                )
-                                st.plotly_chart(fig_box, use_container_width=True)
-
-                                # 시각화 2: 쇼핑몰 점유율 & 브랜드 분석
-                                col_c1, col_c2 = st.columns(2)
-                                with col_c1:
-                                    st.markdown("#### 🏪 판매 쇼핑몰 비중 비교 (Grouped Bar)")
-                                    mall_counts = df_all.groupby(["keyword", "mallName"]).size().reset_index(name="상품수")
-                                    # 각 키워드별 상위 7개 쇼핑몰만 추출
-                                    mall_counts = mall_counts.sort_values(["keyword", "상품수"], ascending=[True, False]).groupby("keyword").head(7).reset_index(drop=True)
-                                    fig_mall = px.bar(
-                                        mall_counts, x="상품수", y="mallName", color="keyword", barmode="group",
-                                        title="검색어별 주요 판매 쇼핑몰 분포",
-                                        template="plotly_dark",
-                                        orientation="h"
-                                    )
-                                    fig_mall.update_layout(
-                                        plot_bgcolor="rgba(0,0,0,0)",
-                                        paper_bgcolor="rgba(0,0,0,0)"
-                                    )
-                                    st.plotly_chart(fig_mall, use_container_width=True)
-
-                                with col_c2:
-                                    st.markdown("#### 🏷️ 상위 주요 브랜드 분포 비교")
-                                    brand_counts = df_all[df_all["brand"] != ""].groupby(["keyword", "brand"]).size().reset_index(name="상품수")
-                                    brand_counts = brand_counts.sort_values(["keyword", "상품수"], ascending=[True, False]).groupby("keyword").head(7).reset_index(drop=True)
-                                    if not brand_counts.empty:
-                                        fig_brand = px.bar(
-                                            brand_counts, x="상품수", y="brand", color="keyword", barmode="group",
-                                            title="검색어별 상위 브랜드 상품 분포",
-                                            template="plotly_dark",
-                                            orientation="h"
-                                        )
-                                        fig_brand.update_layout(
-                                            plot_bgcolor="rgba(0,0,0,0)",
-                                            paper_bgcolor="rgba(0,0,0,0)"
-                                        )
-                                        st.plotly_chart(fig_brand, use_container_width=True)
-                                    else:
-                                        st.info("수집된 상품의 브랜드 정보가 부족합니다.")
-
-                                # 상품 리스트 출력 (필터링 및 정렬)
-                                st.markdown("### 📋 수집된 상품 상세 리스트")
-                                display_df = df_all[["keyword", "title", "lprice", "mallName", "brand", "maker", "category1", "link"]]
-                                display_df.columns = ["검색어", "상품명", "최저가 (원)", "판매몰", "브랜드", "제조사", "카테고리", "상품링크"]
-                                st.dataframe(display_df, use_container_width=True)
-
-                        except Exception as e:
-                            st.error(f"쇼핑 데이터 수집 실패: {e}")
-
-                elif menu == "📝 블로그 검색 분석":
-                    with st.spinner("네이버 블로그 검색 데이터 수집 중..."):
-                        try:
+                    elif menu == "📝 블로그 검색 분석":
+                        with st.spinner("네이버 블로그 검색 데이터 수집 중..."):
                             df_list = []
                             for query in keywords_list:
                                 data = cached_blog_search(client_id, client_secret, query, display_num, 1, sort_type)
@@ -2395,83 +2353,11 @@ with col_main:
                                     df["keyword"] = query
                                     df["postdate_clean"] = pd.to_datetime(df["postdate"], format="%Y%m%d", errors="coerce")
                                     df_list.append(df)
-
-                            if not df_list:
-                                st.warning("조회 결과가 없습니다.")
-                            else:
+                            if df_list:
                                 df_all = pd.concat(df_list, ignore_index=True)
 
-                                # 날짜 필터링 적용
-                                start_dt = pd.to_datetime(start_date)
-                                end_dt = pd.to_datetime(end_date)
-                                df_filtered = df_all[(df_all["postdate_clean"] >= start_dt) & (df_all["postdate_clean"] <= end_dt)]
-
-                                if df_filtered.empty:
-                                    st.warning(f"선택한 기간 ({start_date} ~ {end_date}) 내에 수집된 블로그 글이 없습니다. 수집 개수를 늘리거나 기간을 조정해 보세요.")
-                                else:
-                                    # KPI 요약
-                                    st.markdown(f"### 📝 설정 기간 내 ({start_date} ~ {end_date}) 블로그 포스팅 통계")
-                                    kpi_cols = st.columns(len(keywords_list))
-                                    for i, query in enumerate(keywords_list):
-                                        df_q = df_filtered[df_filtered["keyword"] == query]
-                                        colors = ["text-green", "text-blue", "text-purple", "text-green", "text-blue"]
-                                        if not df_q.empty:
-                                            top_blogger = df_q["bloggername"].value_counts().idxmax()
-                                            top_count = df_q["bloggername"].value_counts().max()
-                                            with kpi_cols[i]:
-                                                make_card(
-                                                    f"📝 {query} 포스트 수", 
-                                                    f"{len(df_q)}개", 
-                                                    f"최다 작성: {top_blogger} ({top_count}개)",
-                                                    color_class=colors[i % len(colors)]
-                                                )
-                                        else:
-                                            with kpi_cols[i]:
-                                                make_card(f"📝 {query} 포스트 수", "0개", "기간 내 해당 글 없음", "")
-
-                                    # 시각화: 작성일별 포스팅 수 추이
-                                    st.markdown("### 📈 기간 내 포스팅 수 시계열 추이 비교")
-                                    trend_df = df_filtered.groupby(["postdate_clean", "keyword"]).size().reset_index(name="포스트수")
-                                    fig_trend = px.line(
-                                        trend_df, x="postdate_clean", y="포스트수", color="keyword",
-                                        labels={"postdate_clean": "작성일", "포스트수": "포스트 수"},
-                                        title="날짜별 블로그 기고량 추이 비교",
-                                        template="plotly_dark",
-                                        markers=True
-                                    )
-                                    fig_trend.update_layout(
-                                        plot_bgcolor="rgba(0,0,0,0)",
-                                        paper_bgcolor="rgba(0,0,0,0)"
-                                    )
-                                    st.plotly_chart(fig_trend, use_container_width=True)
-
-                                    # 시각화: 블로거 작성 빈도
-                                    st.markdown("### 📊 키워드별 상위 주요 블로거 비교")
-                                    blogger_counts = df_filtered.groupby(["keyword", "bloggername"]).size().reset_index(name="포스트수")
-                                    blogger_counts = blogger_counts.sort_values(["keyword", "포스트수"], ascending=[True, False]).groupby("keyword").head(5).reset_index(drop=True)
-                                    fig_blogger = px.bar(
-                                        blogger_counts, x="포스트수", y="bloggername", color="keyword", barmode="group",
-                                        title="수집 데이터 내 상위 다작 블로거 비교",
-                                        template="plotly_dark",
-                                        orientation="h"
-                                    )
-                                    fig_blogger.update_layout(
-                                        plot_bgcolor="rgba(0,0,0,0)",
-                                        paper_bgcolor="rgba(0,0,0,0)"
-                                    )
-                                    st.plotly_chart(fig_blogger, use_container_width=True)
-
-                                    # 테이블 출력
-                                    st.markdown("### 📋 블로그 포스트 리스트 (설정 기간 기준 필터링)")
-                                    display_df = df_filtered[["keyword", "title", "bloggername", "postdate", "link"]]
-                                    display_df.columns = ["검색어", "제목", "블로거", "작성일", "링크"]
-                                    st.dataframe(display_df, use_container_width=True)
-                        except Exception as e:
-                            st.error(f"블로그 데이터 수집 실패: {e}")
-
-                elif menu == "👥 카페글 검색 분석":
-                    with st.spinner("네이버 카페글 데이터 수집 중..."):
-                        try:
+                    elif menu == "👥 카페글 검색 분석":
+                        with st.spinner("네이버 카페글 데이터 수집 중..."):
                             df_list = []
                             for query in keywords_list:
                                 data = cached_cafe_search(client_id, client_secret, query, display_num, 1, sort_type)
@@ -2482,56 +2368,11 @@ with col_main:
                                     df["description"] = df["description"].str.replace("<b>", "").str.replace("</b>", "")
                                     df["keyword"] = query
                                     df_list.append(df)
-
-                            if not df_list:
-                                st.warning("조회 결과가 없습니다.")
-                            else:
+                            if df_list:
                                 df_all = pd.concat(df_list, ignore_index=True)
 
-                                # KPI 요약
-                                st.markdown("### ☕ 카페글 지표 요약 및 비교")
-                                kpi_cols = st.columns(len(df_list))
-                                for i, query in enumerate(keywords_list):
-                                    df_q = df_all[df_all["keyword"] == query]
-                                    if not df_q.empty:
-                                        top_cafe = df_q["cafename"].value_counts().idxmax()
-                                        top_count = df_q["cafename"].value_counts().max()
-                                        colors = ["text-green", "text-blue", "text-purple", "text-green", "text-blue"]
-                                        with kpi_cols[i]:
-                                            make_card(
-                                                f"☕ {query} 게시글", 
-                                                f"{len(df_q)}개", 
-                                                f"최다 카페: {top_cafe} ({top_count}개)",
-                                                color_class=colors[i % len(colors)]
-                                            )
-
-                                # 시각화: 카페별 글 분포
-                                st.markdown("### 📊 키워드별 상위 주요 카페 게시글 분포 비교")
-                                cafe_counts = df_all.groupby(["keyword", "cafename"]).size().reset_index(name="게시글수")
-                                cafe_counts = cafe_counts.sort_values(["keyword", "게시글수"], ascending=[True, False]).groupby("keyword").head(7).reset_index(drop=True)
-                                fig_cafe = px.bar(
-                                    cafe_counts, x="게시글수", y="cafename", color="keyword", barmode="group",
-                                    title="관련 글이 주로 수집된 네이버 카페 분포 비교",
-                                    template="plotly_dark",
-                                    orientation="h"
-                                )
-                                fig_cafe.update_layout(
-                                    plot_bgcolor="rgba(0,0,0,0)",
-                                    paper_bgcolor="rgba(0,0,0,0)"
-                                )
-                                st.plotly_chart(fig_cafe, use_container_width=True)
-
-                                # 테이블 출력
-                                st.markdown("### 📋 카페 게시글 리스트")
-                                display_df = df_all[["keyword", "title", "cafename", "link"]]
-                                display_df.columns = ["검색어", "제목", "카페이름", "링크"]
-                                st.dataframe(display_df, use_container_width=True)
-                        except Exception as e:
-                            st.error(f"카페글 데이터 수집 실패: {e}")
-
-                elif menu == "📰 뉴스 검색 분석":
-                    with st.spinner("네이버 뉴스 데이터 수집 중..."):
-                        try:
+                    elif menu == "📰 뉴스 검색 분석":
+                        with st.spinner("네이버 뉴스 데이터 수집 중..."):
                             df_list = []
                             for query in keywords_list:
                                 data = cached_news_search(client_id, client_secret, query, display_num, 1, sort_type)
@@ -2541,69 +2382,243 @@ with col_main:
                                     df["title"] = df["title"].str.replace("<b>", "").str.replace("</b>", "")
                                     df["description"] = df["description"].str.replace("<b>", "").str.replace("</b>", "")
                                     df["keyword"] = query
-                                    # pubDate parsing (RFC 822 포맷) 및 Naive datetime 처리
                                     df["pubDate_clean"] = pd.to_datetime(df["pubDate"], errors='coerce')
                                     if not df["pubDate_clean"].empty and df["pubDate_clean"].dt.tz is not None:
                                         df["pubDate_clean"] = df["pubDate_clean"].dt.tz_localize(None)
                                     df_list.append(df)
-
-                            if not df_list:
-                                st.warning("조회 결과가 없습니다.")
-                            else:
+                            if df_list:
                                 df_all = pd.concat(df_list, ignore_index=True)
 
-                                # 날짜 필터링 적용
-                                start_dt = pd.to_datetime(start_date)
-                                end_dt = pd.to_datetime(end_date)
-                                df_filtered = df_all[(df_all["pubDate_clean"] >= start_dt) & (df_all["pubDate_clean"] <= end_dt)]
+                    if df_all is not None:
+                        st.session_state[search_df_key] = df_all
+                        st.session_state[search_run_key] = True
+                        st.rerun()
+                    else:
+                        st.warning("조회 결과가 없습니다.")
+                        st.session_state[search_run_key] = False
+                except Exception as e:
+                    st.error(f"데이터 수집 중 오류 발생: {e}")
+                    st.session_state[search_run_key] = False
 
-                                if df_filtered.empty:
-                                    st.warning(f"선택한 기간 ({start_date} ~ {end_date}) 내에 수집된 뉴스 기사가 없습니다. 수집 개수를 늘리거나 기간을 조정해 보세요.")
-                                else:
-                                    # KPI 요약
-                                    st.markdown(f"### 📰 설정 기간 내 ({start_date} ~ {end_date}) 뉴스 기사 통계")
-                                    kpi_cols = st.columns(len(keywords_list))
-                                    for i, query in enumerate(keywords_list):
-                                        df_q = df_filtered[df_filtered["keyword"] == query]
-                                        colors = ["text-green", "text-blue", "text-purple", "text-green", "text-blue"]
-                                        if not df_q.empty:
-                                            latest_news = df_q.loc[df_q["pubDate_clean"].idxmax(), "pubDate_clean"].strftime("%Y-%m-%d %H:%M")
-                                            with kpi_cols[i]:
-                                                make_card(
-                                                    f"📰 {query} 뉴스 기사", 
-                                                    f"{len(df_q)}개", 
-                                                    f"최신 기사: {latest_news}",
-                                                    color_class=colors[i % len(colors)]
-                                                )
-                                        else:
-                                            with kpi_cols[i]:
-                                                make_card(f"📰 {query} 뉴스 기사", "0개", "기간 내 관련 기사 없음", "")
+        if st.session_state.get(search_run_key, False) and st.session_state.get(search_df_key) is not None:
+            df_all = st.session_state[search_df_key]
 
-                                    # 시각화: 날짜별 뉴스 보도량 추이
-                                    st.markdown("### 📈 기간 내 뉴스 보도량 시계열 추이 비교")
-                                    df_filtered["pubDate_only"] = df_filtered["pubDate_clean"].dt.date
-                                    news_trend = df_filtered.groupby(["pubDate_only", "keyword"]).size().reset_index(name="기사수")
-                                    fig_news = px.line(
-                                        news_trend, x="pubDate_only", y="기사수", color="keyword",
-                                        labels={"pubDate_only": "보도일", "기사수": "기사 수"},
-                                        title="날짜별 뉴스 보도량 추이 비교",
-                                        template="plotly_dark",
-                                        markers=True
-                                    )
-                                    fig_news.update_layout(
-                                        plot_bgcolor="rgba(0,0,0,0)",
-                                        paper_bgcolor="rgba(0,0,0,0)"
-                                    )
-                                    st.plotly_chart(fig_news, use_container_width=True)
+            if menu == "🛒 쇼핑 검색 분석":
+                # KPI 요약 카드
+                st.markdown("### 🛍️ 검색어별 가격 및 상품 분포 비교")
+                kpi_cols = st.columns(len(keywords_list))
+                for i, query in enumerate(keywords_list):
+                    df_q = df_all[df_all["keyword"] == query]
+                    if not df_q.empty:
+                        avg_price = df_q[df_q["lprice"] > 0]["lprice"].mean()
+                        min_price = df_q[df_q["lprice"] > 0]["lprice"].min()
+                        colors = ["text-green", "text-blue", "text-purple", "text-green", "text-blue"]
+                        with kpi_cols[i % len(kpi_cols)]:
+                            make_card(
+                                f"🛒 {query} 평균최저가", 
+                                f"{int(avg_price):,}원", 
+                                f"최저가: {int(min_price):,}원 (수집: {len(df_q)}개)",
+                                color_class=colors[i % len(colors)]
+                            )
 
-                                    # 테이블 출력
-                                    st.markdown("### 📋 뉴스 기사 리스트 (설정 기간 기준 필터링)")
-                                    display_df = df_filtered[["keyword", "title", "pubDate", "link", "originallink"]]
-                                    display_df.columns = ["검색어", "기사제목", "발행시간", "네이버뉴스링크", "원문링크"]
-                                    st.dataframe(display_df, use_container_width=True)
-                        except Exception as e:
-                            st.error(f"뉴스 데이터 수집 실패: {e}")
+                # 시각화 1: 박스 플롯 가격 비교 (IQR 이상치 식별에 최적)
+                st.markdown("### 💵 키워드별 상품 최저가 분포 비교 (Box Plot)")
+                fig_box = px.box(
+                    df_all[df_all["lprice"] > 0], x="keyword", y="lprice", color="keyword",
+                    labels={"lprice": "최저 가격 (원)", "keyword": "검색어"},
+                    title="검색 키워드별 상품 최저가 분포 현황 및 극단값(Outlier) 시각화",
+                    template="plotly_dark"
+                )
+                fig_box.update_layout(
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    paper_bgcolor="rgba(0,0,0,0)"
+                )
+                st.plotly_chart(fig_box, use_container_width=True)
 
+                # 시각화 2: 쇼핑몰 점유율 & 브랜드 분석
+                col_c1, col_c2 = st.columns(2)
+                with col_c1:
+                    st.markdown("#### 🏪 판매 쇼핑몰 비중 비교 (Grouped Bar)")
+                    mall_counts = df_all.groupby(["keyword", "mallName"]).size().reset_index(name="상품수")
+                    # 각 키워드별 상위 7개 쇼핑몰만 추출
+                    mall_counts = mall_counts.sort_values(["keyword", "상품수"], ascending=[True, False]).groupby("keyword").head(7).reset_index(drop=True)
+                    fig_mall = px.bar(
+                        mall_counts, x="상품수", y="mallName", color="keyword", barmode="group",
+                        title="검색어별 주요 판매 쇼핑몰 분포",
+                        template="plotly_dark",
+                        orientation="h"
+                    )
+                    fig_mall.update_layout(
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        paper_bgcolor="rgba(0,0,0,0)"
+                    )
+                    st.plotly_chart(fig_mall, use_container_width=True)
+
+                with col_c2:
+                    st.markdown("#### 🏷️ 상위 주요 브랜드 분포 비교")
+                    brand_counts = df_all[df_all["brand"] != ""].groupby(["keyword", "brand"]).size().reset_index(name="상품수")
+                    brand_counts = brand_counts.sort_values(["keyword", "상품수"], ascending=[True, False]).groupby("keyword").head(7).reset_index(drop=True)
+                    if not brand_counts.empty:
+                        fig_brand = px.bar(
+                            brand_counts, x="상품수", y="brand", color="keyword", barmode="group",
+                            title="검색어별 상위 브랜드 상품 분포",
+                            template="plotly_dark",
+                            orientation="h"
+                        )
+                        fig_brand.update_layout(
+                            plot_bgcolor="rgba(0,0,0,0)",
+                            paper_bgcolor="rgba(0,0,0,0)"
+                        )
+                        st.plotly_chart(fig_brand, use_container_width=True)
+                    else:
+                        st.info("수집된 상품의 브랜드 정보가 부족합니다.")
+
+                # 상품 리스트 출력 (필터링 및 정렬)
+                st.markdown("### 📋 수집된 상품 상세 리스트")
+                display_df = df_all[["keyword", "title", "lprice", "mallName", "brand", "maker", "category1", "link"]]
+                display_df.columns = ["검색어", "상품명", "최저가 (원)", "판매몰", "브랜드", "제조사", "카테고리", "상품링크"]
+                st.dataframe(display_df, use_container_width=True)
+
+            elif menu == "📝 블로그 검색 분석":
+                # 날짜 필터링 적용
+                start_dt = pd.to_datetime(start_date)
+                end_dt = pd.to_datetime(end_date)
+                df_filtered = df_all[(df_all["postdate_clean"] >= start_dt) & (df_all["postdate_clean"] <= end_dt)]
+
+                if df_filtered.empty:
+                    st.warning(f"선택한 기간 ({start_date} ~ {end_date}) 내에 작성된 블로그 글이 없습니다. 수집 개수를 늘리거나 기간을 조정해 보세요.")
+                else:
+                    # KPI 요약 카드 배치
+                    st.markdown(f"### 📝 설정 기간 내 ({start_date} ~ {end_date}) 블로그 포스트 통계")
+                    kpi_cols = st.columns(len(keywords_list))
+                    for i, query in enumerate(keywords_list):
+                        df_q = df_filtered[df_filtered["keyword"] == query]
+                        colors = ["text-green", "text-blue", "text-purple", "text-green", "text-blue"]
+                        if not df_q.empty:
+                            latest_date = df_q["postdate_clean"].max().strftime("%Y-%m-%d")
+                            with kpi_cols[i % len(kpi_cols)]:
+                                make_card(
+                                    f"📝 {query} 포스트", 
+                                    f"{len(df_q)}개", 
+                                    f"최신 글: {latest_date}",
+                                    color_class=colors[i % len(colors)]
+                                )
+                        else:
+                            with kpi_cols[i % len(kpi_cols)]:
+                                make_card(f"📝 {query} 포스트", "0개", "기간 내 포스트 없음", "")
+
+                    # 시각화: 날짜별 포스트 발행량 추이
+                    st.markdown("### 📈 기간 내 블로그 포스팅 추이 비교 (시계열)")
+                    post_trend = df_filtered.groupby(["postdate_clean", "keyword"]).size().reset_index(name="포스트수")
+                    fig_blog = px.line(
+                        post_trend, x="postdate_clean", y="포스트수", color="keyword",
+                        labels={"postdate_clean": "발행일", "포스트수": "포스트 수"},
+                        title="날짜별 블로그 글 발행 추이 비교",
+                        template="plotly_dark",
+                        markers=True
+                    )
+                    fig_blog.update_layout(
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        paper_bgcolor="rgba(0,0,0,0)"
+                    )
+                    st.plotly_chart(fig_blog, use_container_width=True)
+
+                    # 테이블 출력
+                    st.markdown("### 📋 블로그 포스트 리스트 (설정 기간 기준 필터링)")
+                    display_df = df_filtered[["keyword", "title", "bloggername", "postdate", "link"]]
+                    display_df.columns = ["검색어", "제목", "블로거", "작성일", "링크"]
+                    st.dataframe(display_df, use_container_width=True)
+
+            elif menu == "👥 카페글 검색 분석":
+                # KPI 요약
+                st.markdown("### ☕ 카페글 지표 요약 및 비교")
+                kpi_cols = st.columns(len(keywords_list))
+                for i, query in enumerate(keywords_list):
+                    df_q = df_all[df_all["keyword"] == query]
+                    if not df_q.empty:
+                        top_cafe = df_q["cafename"].value_counts().idxmax()
+                        top_count = df_q["cafename"].value_counts().max()
+                        colors = ["text-green", "text-blue", "text-purple", "text-green", "text-blue"]
+                        with kpi_cols[i % len(kpi_cols)]:
+                            make_card(
+                                f"☕ {query} 게시글", 
+                                f"{len(df_q)}개", 
+                                f"최다 카페: {top_cafe} ({top_count}개)",
+                                color_class=colors[i % len(colors)]
+                            )
+
+                # 시각화: 카페별 글 분포
+                st.markdown("### 📊 키워드별 상위 주요 카페 게시글 분포 비교")
+                cafe_counts = df_all.groupby(["keyword", "cafename"]).size().reset_index(name="게시글수")
+                cafe_counts = cafe_counts.sort_values(["keyword", "게시글수"], ascending=[True, False]).groupby("keyword").head(7).reset_index(drop=True)
+                fig_cafe = px.bar(
+                    cafe_counts, x="게시글수", y="cafename", color="keyword", barmode="group",
+                    title="관련 글이 주로 수집된 네이버 카페 분포 비교",
+                    template="plotly_dark",
+                    orientation="h"
+                )
+                fig_cafe.update_layout(
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    paper_bgcolor="rgba(0,0,0,0)"
+                )
+                st.plotly_chart(fig_cafe, use_container_width=True)
+
+                # 테이블 출력
+                st.markdown("### 📋 카페 게시글 리스트")
+                display_df = df_all[["keyword", "title", "cafename", "link"]]
+                display_df.columns = ["검색어", "제목", "카페이름", "링크"]
+                st.dataframe(display_df, use_container_width=True)
+
+            elif menu == "📰 뉴스 검색 분석":
+                # 날짜 필터링 적용
+                start_dt = pd.to_datetime(start_date)
+                end_dt = pd.to_datetime(end_date)
+                df_filtered = df_all[(df_all["pubDate_clean"] >= start_dt) & (df_all["pubDate_clean"] <= end_dt)]
+
+                if df_filtered.empty:
+                    st.warning(f"선택한 기간 ({start_date} ~ {end_date}) 내에 수집된 뉴스 기사가 없습니다. 수집 개수를 늘리거나 기간을 조정해 보세요.")
+                else:
+                    # KPI 요약
+                    st.markdown(f"### 📰 설정 기간 내 ({start_date} ~ {end_date}) 뉴스 기사 통계")
+                    kpi_cols = st.columns(len(keywords_list))
+                    for i, query in enumerate(keywords_list):
+                        df_q = df_filtered[df_filtered["keyword"] == query]
+                        colors = ["text-green", "text-blue", "text-purple", "text-green", "text-blue"]
+                        if not df_q.empty:
+                            latest_news = df_q.loc[df_q["pubDate_clean"].idxmax(), "pubDate_clean"].strftime("%Y-%m-%d %H:%M")
+                            with kpi_cols[i % len(kpi_cols)]:
+                                make_card(
+                                    f"📰 {query} 뉴스 기사", 
+                                    f"{len(df_q)}개", 
+                                    f"최신 기사: {latest_news}",
+                                    color_class=colors[i % len(colors)]
+                                )
+                        else:
+                            with kpi_cols[i % len(kpi_cols)]:
+                                make_card(f"📰 {query} 뉴스 기사", "0개", "기간 내 관련 기사 없음", "")
+
+                    # 시각화: 날짜별 뉴스 보도량 추이
+                    st.markdown("### 📈 기간 내 뉴스 보도량 시계열 추이 비교")
+                    df_filtered["pubDate_only"] = df_filtered["pubDate_clean"].dt.date
+                    news_trend = df_filtered.groupby(["pubDate_only", "keyword"]).size().reset_index(name="기사수")
+                    fig_news = px.line(
+                        news_trend, x="pubDate_only", y="기사수", color="keyword",
+                        labels={"pubDate_only": "보도일", "기사수": "기사 수"},
+                        title="날짜별 뉴스 보도량 추이 비교",
+                        template="plotly_dark",
+                        markers=True
+                    )
+                    fig_news.update_layout(
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        paper_bgcolor="rgba(0,0,0,0)"
+                    )
+                    st.plotly_chart(fig_news, use_container_width=True)
+
+                    # 테이블 출력
+                    st.markdown("### 📋 뉴스 기사 리스트 (설정 기간 기준 필터링)")
+                    display_df = df_filtered[["keyword", "title", "pubDate", "link", "originallink"]]
+                    display_df.columns = ["검색어", "기사제목", "발행시간", "네이버뉴스링크", "원문링크"]
+                    st.dataframe(display_df, use_container_width=True)
 # AI 툴바 컬럼 시작 (우측)
 with col_ai:
     render_ai_toolbar()
