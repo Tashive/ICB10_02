@@ -1262,10 +1262,16 @@ elif menu == "📦 내 쇼핑몰 상품 진단":
         st.session_state["diagnose_warnings"] = []
     if "diagnose_actions" not in st.session_state:
         st.session_state["diagnose_actions"] = {}
+    if "diagnose_last_filename" not in st.session_state:
+        st.session_state["diagnose_last_filename"] = ""
         
     uploaded_file = st.file_uploader("쇼핑몰 상품 실적 데이터 파일 업로드 (Excel 또는 CSV)", type=["xlsx", "xls", "csv"])
     
     if uploaded_file is not None:
+        # 파일이 변경되면 체크리스트 상태 자동 초기화
+        if st.session_state["diagnose_last_filename"] != uploaded_file.name:
+            st.session_state["diagnose_actions"] = {}
+            st.session_state["diagnose_last_filename"] = uploaded_file.name
         try:
             # 1. 파일 포맷 파싱
             if uploaded_file.name.endswith('.csv'):
@@ -1578,6 +1584,11 @@ elif menu == "📦 내 쇼핑몰 상품 진단":
                     if is_checked != st.session_state["diagnose_actions"].get(item, False):
                         st.session_state["diagnose_actions"][item] = is_checked
                         st.rerun()
+                
+                st.markdown(" ")
+                if st.button("🔄 액션 플랜 체크 상태 초기화", use_container_width=True):
+                    st.session_state["diagnose_actions"] = {}
+                    st.rerun()
                         
             st.markdown("---")
             
