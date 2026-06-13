@@ -225,6 +225,80 @@ def generate_mock_sales_trend(df_cat, avg_price_unit):
     
     return df_sales[["period", "추정 매출액", "category"]]
 
+def parse_smartstore_data(file):
+    """
+    스마트스토어 상품/판매 실적 엑셀 또는 CSV 파일을 파싱하여 표준 칼럼 구조로 변환합니다.
+    """
+    try:
+        # 파일 확장자에 따라 판다스로 읽음
+        if file.name.endswith('.csv'):
+            try:
+                df = pd.read_csv(file, encoding='utf-8')
+            except UnicodeDecodeError:
+                df = pd.read_csv(file, encoding='cp949')
+        else:
+            df = pd.read_excel(file)
+            
+        # 컬럼 표준화 매핑 딕셔너리
+        column_mappings = {
+            "상품명": ["상품명", "물품명", "상품 이름", "Product Name"],
+            "상품ID": ["상품번호", "상품ID", "상품 번호", "Product ID"],
+            "클릭수": ["유입수", "클릭수", "조회수", "클릭", "Clicks", "Views"],
+            "구매수": ["결제수량", "구매수량", "구매수", "판매수량", "Sales Qty", "Purchases"],
+            "매출액": ["결제금액", "매출액", "판매금액", "매출", "Revenue", "Sales Amount"],
+            "구매전환율": ["구매전환율", "전환율", "구매전환율 (%)", "Conversion Rate"]
+        }
+        
+        standard_df = pd.DataFrame()
+        
+        for std_col, syn_list in column_mappings.items():
+            matched_col = None
+            for col in df.columns:
+                clean_col = str(col).strip().replace(" ", "").lower()
+                clean_syns = [str(syn).strip().replace(" ", "").lower() for syn in syn_list]
+                if clean_col in clean_syns or any(clean_syn in clean_col for clean_syn in clean_syns):
+                    matched_col = col
+                    break
+            
+            if matched_col is not None:
+                standard_df[std_col] = df[matched_col]
+            else:
+                if std_col == "상품명":
+                    raise ValueError("엑셀 파일 내에서 '상품명' 컬럼을 찾을 수 없습니다.")
+                elif std_col == "클릭수":
+                    standard_df["클릭수"] = 0
+                elif std_col == "구매수":
+                    standard_df["구매수"] = 0
+                elif std_col == "매출액":
+                    standard_df["매출액"] = 0
+                elif std_col == "구매전환율":
+                    standard_df["구매전환율"] = 0.0
+                    
+        standard_df["상품명"] = standard_df["상품명"].astype(str)
+        if "상품ID" in standard_df.columns:
+            standard_df["상품ID"] = standard_df["상품ID"].astype(str)
+        else:
+            standard_df["상품ID"] = [f"MOCK_{i}" for i in range(len(standard_df))]
+            
+        standard_df["클릭수"] = pd.to_numeric(standard_df["클릭수"], errors='coerce').fillna(0).astype(int)
+        standard_df["구매수"] = pd.to_numeric(standard_df["구매수"], errors='coerce').fillna(0).astype(int)
+        standard_df["매출액"] = pd.to_numeric(standard_df["매출액"], errors='coerce').fillna(0).astype(int)
+        standard_df["구매전환율"] = pd.to_numeric(standard_df["구매전환율"], errors='coerce').fillna(0.0).astype(float)
+        
+        mask = (standard_df["구매전환율"] == 0.0) & (standard_df["클릭수"] > 0)
+        standard_df.loc[mask, "구매전환율"] = (standard_df.loc[mask, "구매수"] / standard_df.loc[mask, "클릭수"] * 100).round(2)
+        
+        standard_df["평균 단가 (원)"] = 0
+        price_mask = standard_df["구매수"] > 0
+        standard_df.loc[price_mask, "평균 단가 (원)"] = (standard_df.loc[price_mask, "매출액"] / standard_df.loc[price_mask, "구매수"]).astype(int)
+        
+        zero_price_mask = standard_df["평균 단가 (원)"] == 0
+        standard_df.loc[zero_price_mask, "평균 단가 (원)"] = 35000
+        
+        return standard_df
+    except Exception as e:
+        raise ValueError(f"파일 파싱 중 에러 발생: {str(e)}")
+
 # UI 헬퍼 함수
 def make_card(title, value, subtitle="", color_class=""):
     st.markdown(f"""
