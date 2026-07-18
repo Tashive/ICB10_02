@@ -1,10 +1,11 @@
 """
-건강기능식품 추천을 위한 정밀 스코어링 엔진 스크립트 (Parquet 상대경로 버전)
+건강기능식품 추천을 위한 정밀 스코어링 엔진 스크립트 (가산점 균등분배 및 알레르기 하드필터 고도화)
 
-이 스크립트는 `NutriFit_Mapped_Master_v2.parquet` 데이터를 상대경로로 로드하고 필터링하며,
-사용자 문진 데이터(건강 고민, 라이프스타일)를 토대로 성분별 웰니스 가산점(bonus)을 계산합니다.
-또한, 부작용 과거력 성분을 기반으로 추천 목록에서 해당 성분 제품을 하드 필터링(Hard Filter) 배제하며,
-평점, 리뷰 수, 웰니스 보너스를 결합한 종합 웰니스 스코어를 기반으로 상위 제품을 추천합니다.
+이 스크립트는 `NutriFit_Mapped_Master_v2.parquet` 데이터를 로드하고 필터링하며,
+사용자 문진 데이터를 기반으로 6대 핵심 건강 성분별 웰니스 가산점(bonus)을 연산합니다.
+건강고민이 여러 개 선택된 경우(최대 3개) 가산점은 고민 개수(1/N)로 균등 분배 스케일링됩니다.
+또한, 부작용 성분 및 알레르기 유발 성분(과일류 및 기타 직접 입력 포함)이 제품 정보에 포함된 경우
+추천 리스트에서 원천 배제(Hard Filter)하는 안전성 로직을 제공합니다.
 """
 
 import os
@@ -24,6 +25,7 @@ def load_data():
 def calculate_wellness_bonus(survey_data):
     """
     유저의 라이프스타일 및 건강고민 입력을 바탕으로 6대 성분별 가산점 딕셔너리를 반환합니다.
+    건강고민이 여러 개일 경우(최대 3개), 고민 가산점은 고민 개수에 반비례하여 균등 분배(1/N 스케일링)됩니다.
     """
     bonuses = {
         "멀티비타민": 0.0,
@@ -34,39 +36,44 @@ def calculate_wellness_bonus(survey_data):
         "마그네슘": 0.0
     }
     
-    # 1. 건강 고민 및 목표 (최대 2개)
+    # 1. 건강 고민 및 목표 (최대 3개)에 따른 가산점 스케일링 분배
     goals = survey_data.get("health_goals", [])
-    for goal in goals:
-        if goal == "만성피로":
-            bonuses["멀티비타민"] += 5.0
-            bonuses["비타민C"] += 3.0
-        elif goal == "눈 건조·피로":
-            bonuses["오메가3"] += 5.0
-            bonuses["멀티비타민"] += 2.0
-        elif goal == "장 건강":
-            bonuses["유산균 / 프로바이오틱스"] += 5.0
-        elif goal == "피부탄력·이너뷰티":
-            bonuses["콜라겐"] += 5.0
-            bonuses["비타민C"] += 2.0
-        elif goal == "체지방감소·다이어트":
-            bonuses["멀티비타민"] += 2.0
-        elif goal == "면역력저하":
-            bonuses["멀티비타민"] += 4.0
-            bonuses["유산균 / 프로바이오틱스"] += 3.0
-        elif goal == "관절보호":
-            bonuses["콜라겐"] += 4.0
-            bonuses["마그네슘"] += 2.0
-        elif goal == "수면부족·스트레스케어":
-            bonuses["마그네슘"] += 5.0
-            bonuses["멀티비타민"] += 2.0
-        elif goal == "항노화·항산화":
-            bonuses["비타민C"] += 5.0
-            bonuses["멀티비타민"] += 2.0
-        elif goal == "생리불순·생리통":
-            bonuses["마그네슘"] += 3.0
-            bonuses["오메가3"] += 3.0
+    goal_count = len(goals)
+    
+    if goal_count > 0:
+        scale = 1.0 / goal_count
+        
+        for goal in goals:
+            if goal == "만성피로":
+                bonuses["멀티비타민"] += 5.0 * scale
+                bonuses["비타민C"] += 3.0 * scale
+            elif goal == "눈 건조·피로":
+                bonuses["오메가3"] += 5.0 * scale
+                bonuses["멀티비타민"] += 2.0 * scale
+            elif goal == "장 건강":
+                bonuses["유산균 / 프로바이오틱스"] += 5.0 * scale
+            elif goal == "피부탄력·이너뷰티":
+                bonuses["콜라겐"] += 5.0 * scale
+                bonuses["비타민C"] += 2.0 * scale
+            elif goal == "체지방감소·다이어트":
+                bonuses["멀티비타민"] += 2.0 * scale
+            elif goal == "면역력저하":
+                bonuses["멀티비타민"] += 4.0 * scale
+                bonuses["유산균 / 프로바이오틱스"] += 3.0 * scale
+            elif goal == "관절보호":
+                bonuses["콜라겐"] += 4.0 * scale
+                bonuses["마그네슘"] += 2.0 * scale
+            elif goal == "수면부족·스트레스케어":
+                bonuses["마그네슘"] += 5.0 * scale
+                bonuses["멀티비타민"] += 2.0 * scale
+            elif goal == "항노화·항산화":
+                bonuses["비타민C"] += 5.0 * scale
+                bonuses["멀티비타민"] += 2.0 * scale
+            elif goal == "생리불순·생리통":
+                bonuses["마그네슘"] += 3.0 * scale
+                bonuses["오메가3"] += 3.0 * scale
             
-    # 2. 라이프스타일 가산점
+    # 2. 라이프스타일 가산점 (고민 개수 스케일링 미적용)
     # 운동
     exercise = survey_data.get("exercise", [])
     if any(ex in exercise for ex in ["저항성·근력 운동", "고강도 인터벌", "고강도 유산소"]):
@@ -99,8 +106,7 @@ def calculate_wellness_bonus(survey_data):
 
 def get_recommendations(survey_data, selected_category=None, top_n=10):
     """
-    유저 문진 데이터를 입력받아 가산점 및 부작용 필터(Hard Filter)를 연동해 추천 상품 목록을 반환합니다.
-    카테고리가 주어지면 해당 카테고리에 우선순위를 부여하거나 필터링합니다.
+    유저 문진 데이터를 입력받아 가산점 및 부작용/알레르기 필터를 연동해 추천 상품 목록을 반환합니다.
     """
     df = load_data()
     
@@ -108,7 +114,7 @@ def get_recommendations(survey_data, selected_category=None, top_n=10):
     df['rating'] = pd.to_numeric(df['rating'], errors='coerce').fillna(0.0)
     df['review_count'] = pd.to_numeric(df['review_count'], errors='coerce').fillna(0).astype(int)
     
-    # 2. 부작용 성분 기반 하드 필터(Hard Filter) 배제 로직
+    # 2. 부작용 성분 및 알레르기 유발원료 하드 필터(Hard Filter) 배제 로직
     side_effects = list(survey_data.get("side_effects", []))
     direct_input = survey_data.get("side_effect_direct", "").strip()
     if direct_input:
@@ -121,22 +127,55 @@ def get_recommendations(survey_data, selected_category=None, top_n=10):
         if se_clean and se_clean not in ["없음", "기타직접입력"]:
             banned_keywords.append(se_clean)
             if "오메가" in se_clean:
-                banned_keywords.append("epa")
-                banned_keywords.append("dha")
+                banned_keywords.extend(["epa", "dha"])
             if "유산균" in se_clean or "프로바이오틱스" in se_clean:
                 banned_keywords.extend(["유산균", "프로바이오틱스", "락토", "probiotic"])
+
+    # 알레르기 배제 키워드 세트 구축
+    allergies = list(survey_data.get("allergies", []))
+    allergy_direct = survey_data.get("allergy_direct", "").strip()
+    if allergy_direct:
+        allergies.append(allergy_direct)
+        
+    allergy_rules = {
+        "갑각류": ["새우", "게", "랍스터", "갑각류", "크랩", "shrimp", "crab", "lobster"],
+        "대두": ["대두", "콩", "소이", "soy"],
+        "글루텐": ["밀", "보리", "호밀", "글루텐", "wheat", "gluten"],
+        "유제품": ["우유", "유당", "유청", "카제인", "milk", "whey", "lactose", "casein"],
+        "견과류": ["땅콩", "호두", "아몬드", "캐슈", "견과", "peanut", "nut", "almond", "walnut"],
+        "어류": ["피쉬", "생선", "연어", "대구", "fish", "salmon", "cod"],
+        "과일류": ["사과", "복숭아", "토마토", "딸기", "바나나", "체리", "과일", "fruit", "apple", "peach", "tomato", "strawberry", "banana"]
+    }
+    
+    allergy_keywords = []
+    for alg in allergies:
+        if alg in allergy_rules:
+            allergy_keywords.extend(allergy_rules[alg])
+        elif alg not in ["없음", "기타(직접입력)"]:
+            alg_clean = re.sub(r'[^a-zA-Z0-9가-힣]', '', alg).lower()
+            if alg_clean:
+                allergy_keywords.append(alg_clean)
                 
-    def is_banned(std_ing):
-        if not isinstance(std_ing, str) or not banned_keywords:
-            return False
+    # 필터 아웃 판정 함수
+    def is_filtered_out(row):
+        # A. 부작용 필터
+        std_ing = str(row.get('표준성분', ''))
         std_ing_clean = re.sub(r'[^a-zA-Z0-9가-힣]', '', std_ing).lower()
         for kw in banned_keywords:
             if kw in std_ing_clean:
                 return True
+                
+        # B. 알레르기 필터 (브랜드명, 상품명, 표준성분 비교)
+        prod_name = str(row.get('product_name') or row.get('displayName') or '').lower()
+        brand = str(row.get('brandName') or row.get('brand') or '').lower()
+        full_info_text = f"{prod_name} {brand} {std_ing_clean}"
+        for akw in allergy_keywords:
+            if akw in full_info_text:
+                return True
+                
         return False
-        
-    # 부작용 성분이 함유된 제품 원천 배제
-    df_filtered = df[~df['표준성분'].apply(is_banned)].copy()
+
+    df_filtered = df[~df.apply(is_filtered_out, axis=1)].copy()
     
     if df_filtered.empty:
         return df_filtered
@@ -173,7 +212,6 @@ def get_recommendations(survey_data, selected_category=None, top_n=10):
             return selected_category in cats
         df_filtered = df_filtered[df_filtered['최종카테고리'].apply(contains_category)].copy()
         
-    # 스코어 높은 순 정렬 및 상위 N개 추천
     recommended_df = df_filtered.sort_values(by='score', ascending=False)
     
     return recommended_df.head(top_n)
