@@ -1,0 +1,13 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+0_data/inspect.png
+0_data/verify_report.txt
+0_data/analysis_report.txt
+0_data/benchmark_io.py
+0_data/verify_ingredients.py
+0_data/analyze_and_rule.py
+0_data/update_master_v2.py
+0_data/hybrid_matching.py
